@@ -17,6 +17,19 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Compute merge-base with remote p4395
+        id: merge_base
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          GCC_REPO="https://x-access-token:${GH_TOKEN}@github.com/CppReflectionAD/gcc.git"
+          git fetch --no-tags --depth=100 "$GCC_REPO" +refs/heads/p4395:refs/remotes/gcc/p4395
+          sha="$(git merge-base HEAD gcc/p4395)"
+          echo "Merge-base commit: $sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${sha:0:7}" >> "$GITHUB_OUTPUT"
+
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
