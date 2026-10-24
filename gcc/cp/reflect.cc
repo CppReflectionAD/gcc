@@ -3362,10 +3362,16 @@ append_block_statement (location_t loc, tree stmt,
       return;
     }
 
-  if (TREE_CODE (stmt) == INIT_EXPR
-      && TREE_OPERAND_LENGTH (stmt) > 0
-      && VAR_P (TREE_OPERAND (stmt, 0))
-      && !DECL_ARTIFICIAL (TREE_OPERAND (stmt, 0)))
+  /* The initialization of a named local is part of its declaration, which
+     the variable's DECL_EXPR reports.  For a class type it can be converted
+     to void, as in `(void) (a = make_t (x))`.  */
+  tree init = stmt;
+  while (CONVERT_EXPR_P (init) && VOID_TYPE_P (TREE_TYPE (init)))
+    init = TREE_OPERAND (init, 0);
+  if (TREE_CODE (init) == INIT_EXPR
+      && TREE_OPERAND_LENGTH (init) > 0
+      && VAR_P (TREE_OPERAND (init, 0))
+      && !DECL_ARTIFICIAL (TREE_OPERAND (init, 0)))
     return;
 
   CONSTRUCTOR_APPEND_ELT (*elts, NULL_TREE,
