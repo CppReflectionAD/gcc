@@ -3644,7 +3644,9 @@ eval_is_declaration_statement (tree r)
       && TREE_OPERAND_LENGTH (r) > 0
       && is_return_slot (TREE_OPERAND (r, 0)))
     return boolean_false_node;
-  if (r && (TREE_CODE (r) == INIT_EXPR || TREE_CODE (r) == MODIFY_EXPR))
+  /* An INIT_EXPR initializes a variable it declares; a MODIFY_EXPR is an
+     assignment, `a = e;` or `a += e;`, which is an expression statement.  */
+  if (r && TREE_CODE (r) == INIT_EXPR)
     return boolean_true_node;
   if (r && TREE_CODE (r) == DECL_EXPR)
     {
@@ -3670,8 +3672,7 @@ eval_declared_variable_of (location_t loc, const constexpr_ctx *ctx, tree r,
     decl = DECL_EXPR_DECL (r);
   else if (r && DECL_P (r))
     decl = r;
-  else if (r && (TREE_CODE (r) == INIT_EXPR || TREE_CODE (r) == MODIFY_EXPR)
-	   && TREE_OPERAND_LENGTH (r) > 0)
+  else if (r && TREE_CODE (r) == INIT_EXPR && TREE_OPERAND_LENGTH (r) > 0)
     decl = TREE_OPERAND (r, 0);
 
   if (decl && DECL_P (decl))
