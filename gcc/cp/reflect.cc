@@ -3732,6 +3732,14 @@ find_var_initializer_in_scope (tree var)
 	{
 	  return walk (BIND_EXPR_BODY (stmt));
 	}
+      /* The rest of the block after a local with a non-trivial destructor
+	 is the body of a TRY_FINALLY_EXPR (or, for a named return value, a
+	 TRY_CATCH_EXPR), as in append_block_statement.  */
+      else if (TREE_CODE (stmt) == TRY_FINALLY_EXPR
+	       || TREE_CODE (stmt) == TRY_CATCH_EXPR)
+	{
+	  return walk (TREE_OPERAND (stmt, 0));
+	}
       else if (TREE_CODE (stmt) == INIT_EXPR || TREE_CODE (stmt) == MODIFY_EXPR)
 	{
 	  if (TREE_OPERAND_LENGTH (stmt) > 1 && TREE_OPERAND (stmt, 0) == target_var)
