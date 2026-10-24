@@ -3725,6 +3725,17 @@ find_var_initializer_in_scope (tree var)
 	{
 	  return walk (BIND_EXPR_BODY (stmt));
 	}
+      /* A local whose type has a non-trivial destructor makes the rest of
+	 its block the body of a TRY_FINALLY_EXPR (a CLEANUP_STMT before
+	 genericization); later locals are initialized in that body.  */
+      else if (TREE_CODE (stmt) == TRY_FINALLY_EXPR)
+	{
+	  return walk (TREE_OPERAND (stmt, 0));
+	}
+      else if (TREE_CODE (stmt) == CLEANUP_STMT)
+	{
+	  return walk (CLEANUP_BODY (stmt));
+	}
       else if (TREE_CODE (stmt) == INIT_EXPR || TREE_CODE (stmt) == MODIFY_EXPR)
 	{
 	  if (TREE_OPERAND_LENGTH (stmt) > 1 && TREE_OPERAND (stmt, 0) == target_var)
