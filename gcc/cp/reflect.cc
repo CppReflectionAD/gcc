@@ -4218,6 +4218,19 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
 	CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
 				get_reflection_raw (loc, arg, REFLECT_UNDEF));
     }
+  else if (CONVERT_EXPR_P (r)
+	   && TYPE_REF_P (TREE_TYPE (r))
+	   && TREE_CODE (TREE_OPERAND (r, 0)) == ADDR_EXPR)
+    {
+      // Binding a reference to an lvalue converts the lvalue's address to
+      // the reference type, as in `(const double &) &x` for `x` passed to
+      // a `const double &` parameter.  The source has no `&`: the operand
+      // is the lvalue.
+      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+			      get_reflection_raw (loc,
+						  TREE_OPERAND (TREE_OPERAND (r, 0), 0),
+						  REFLECT_UNDEF));
+    }
   else
     {
       int len = cp_tree_operand_length (r);
