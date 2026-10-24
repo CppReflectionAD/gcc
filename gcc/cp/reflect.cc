@@ -2531,7 +2531,7 @@ eval_operator_of (location_t loc, const constexpr_ctx *ctx, tree r,
   if (code == NON_LVALUE_EXPR)
     return build_int_cst (ret_type, meta_operators[0][OVL_OP_PLUS_EXPR]);
 
-  if (code < MAX_TREE_CODES)
+  if (code < MAX_TREE_CODES && !REFERENCE_REF_P (r))
     {
       int j = ovl_op_mapping[code];
       if (j != OVL_OP_ERROR_MARK)
@@ -3976,13 +3976,19 @@ eval_is_literal (tree r)
   return boolean_false_node;
 }
 
+/* True if R is a conversion.  That includes the dereference that
+   convert_from_reference puts around a call returning a reference, or a
+   use of a reference, as in `return std::max (x, y);`: it isn't a `*` in
+   the source but the lvalue the reference refers to.  */
+
 static bool
 is_cast_tree (tree r)
 {
   if (!r)
     return false;
   tree_code code = TREE_CODE (r);
-  return (code == CONVERT_EXPR
+  return (REFERENCE_REF_P (r)
+	  || code == CONVERT_EXPR
 	  || code == NOP_EXPR
 	  || code == VIEW_CONVERT_EXPR
 	  || code == FLOAT_EXPR
