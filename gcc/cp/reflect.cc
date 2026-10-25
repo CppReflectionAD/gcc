@@ -3345,6 +3345,10 @@ eval_body_of (location_t loc, const constexpr_ctx *ctx, tree r,
     return throw_exception (loc, ctx, "function is not defined",
 			    fun, non_constant_p, jump_target);
 
+  if (TREE_CODE (body) != BIND_EXPR && TREE_CODE (body) != STATEMENT_LIST)
+    body = build3_loc (DECL_SOURCE_LOCATION (r), BIND_EXPR, void_type_node,
+		       NULL_TREE, body, NULL_TREE);
+
   return get_reflection_raw (loc, body, REFLECT_UNDEF);
 }
 
@@ -3404,13 +3408,10 @@ append_block_statement (location_t loc, tree stmt,
 {
   if (stmt && added_statement_p (stmt))
     return;
-  while (stmt && (TREE_CODE (stmt) == BIND_EXPR
-		  || TREE_CODE (stmt) == CLEANUP_POINT_EXPR
+  while (stmt && (TREE_CODE (stmt) == CLEANUP_POINT_EXPR
 		  || TREE_CODE (stmt) == EXPR_STMT))
     {
-      if (TREE_CODE (stmt) == BIND_EXPR)
-	stmt = BIND_EXPR_BODY (stmt);
-      else if (TREE_CODE (stmt) == CLEANUP_POINT_EXPR)
+      if (TREE_CODE (stmt) == CLEANUP_POINT_EXPR)
 	stmt = TREE_OPERAND (stmt, 0);
       else
 	stmt = EXPR_STMT_EXPR (stmt);
@@ -3470,14 +3471,27 @@ eval_statements_of (location_t loc, const constexpr_ctx *ctx, tree r,
     return throw_exception (loc, ctx, "reflection does not represent a block or statement",
 			    fun, non_constant_p, jump_target);
 
+  vec<constructor_elt, va_gc> *elts = nullptr;
+
+  if (r && (TREE_CODE (r) == BIND_EXPR || TREE_CODE (r) == STATEMENT_LIST))
+    {
+      while (r && TREE_CODE (r) == BIND_EXPR)
+	r = BIND_EXPR_BODY (r);
+      if (r && TREE_CODE (r) == STATEMENT_LIST)
+	{
+	  for (tree stmt : tsi_range (r))
+	    append_block_statement (loc, stmt, &elts);
+	}
+      else if (r)
+	append_block_statement (loc, r, &elts);
+      return get_vector_of_info_elts (elts);
+    }
+
   // Automatically unwrap common statement wrappers recursively
-  while (r && (TREE_CODE (r) == BIND_EXPR
-	       || TREE_CODE (r) == CLEANUP_POINT_EXPR
+  while (r && (TREE_CODE (r) == CLEANUP_POINT_EXPR
 	       || TREE_CODE (r) == EXPR_STMT))
     {
-      if (TREE_CODE (r) == BIND_EXPR)
-	r = BIND_EXPR_BODY (r);
-      else if (TREE_CODE (r) == CLEANUP_POINT_EXPR)
+      if (TREE_CODE (r) == CLEANUP_POINT_EXPR)
 	r = TREE_OPERAND (r, 0);
       else if (TREE_CODE (r) == EXPR_STMT)
 	r = EXPR_STMT_EXPR (r);
@@ -3486,16 +3500,9 @@ eval_statements_of (location_t loc, const constexpr_ctx *ctx, tree r,
   if (r && TREE_CODE (r) == DEBUG_BEGIN_STMT)
     return get_vector_of_info_elts (nullptr);
 
-  vec<constructor_elt, va_gc> *elts = nullptr;
-
   if (r)
     {
-      if (TREE_CODE (r) == STATEMENT_LIST)
-	{
-	  for (tree stmt : tsi_range (r))
-	    append_block_statement (loc, stmt, &elts);
-	}
-      else if (TREE_CODE (r) == IF_STMT)
+      if (TREE_CODE (r) == IF_STMT)
 	{
 	  if (IF_COND (r))
 	    CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
@@ -3651,11 +3658,23 @@ eval_is_statement (tree r)
 }
 
 static tree
+eval_is_compound_statement (tree r)
+{
+  if (!r)
+    return boolean_false_node;
+  if (TREE_CODE (r) == BIND_EXPR || TREE_CODE (r) == STATEMENT_LIST)
+    return boolean_true_node;
+  return boolean_false_node;
+}
+
+static tree
 eval_is_expression (tree r)
 {
   if (!r)
     return boolean_false_node;
   tree_code code = TREE_CODE (r);
+  if (code == BIND_EXPR)
+    return boolean_false_node;
   if (EXPR_P (r)
       || CONSTANT_CLASS_P (r)
       || code == VAR_DECL
@@ -3754,6 +3773,8 @@ nrv_init_p (tree r)
 static tree
 eval_is_return_statement (tree r)
 {
+  if (eval_is_compound_statement (r) == boolean_true_node)
+    return boolean_false_node;
   r = unwrap_statement_wrappers (r);
   if (!r)
     return boolean_false_node;
@@ -3769,6 +3790,8 @@ eval_is_return_statement (tree r)
 static tree
 eval_is_declaration_statement (tree r)
 {
+  if (eval_is_compound_statement (r) == boolean_true_node)
+    return boolean_false_node;
   r = unwrap_statement_wrappers (r);
   if (!r)
     return boolean_false_node;
@@ -9351,6 +9374,8 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
       return eval_statements_of (loc, ctx, h, non_constant_p, jump_target, fun);
     case METAFN_IS_STATEMENT:
       return eval_is_statement (h);
+    case METAFN_IS_COMPOUND_STATEMENT:
+      return eval_is_compound_statement (h);
     case METAFN_IS_EXPRESSION:
       return eval_is_expression (h);
     case METAFN_IS_RETURN_STATEMENT:

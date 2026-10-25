@@ -315,6 +315,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     consteval vector<info> statements_of(info);
 
     consteval bool is_statement(info);
+    consteval bool is_compound_statement(info);
     consteval bool is_expression(info);
     consteval bool is_return_statement(info);
     consteval bool is_declaration_statement(info);
