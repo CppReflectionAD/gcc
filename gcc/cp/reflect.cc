@@ -3297,6 +3297,30 @@ eval_return_type_of (location_t loc, const constexpr_ctx *ctx, tree r,
   return get_reflection_raw (loc, r, REFLECT_UNDEF);
 }
 
+/* Process std::meta::has_body.
+   Returns: true if r represents a function that has a reachable body.
+   Otherwise, false.  */
+
+static tree
+eval_has_body (tree r)
+{
+  if (eval_is_function (r) != boolean_true_node)
+    return boolean_false_node;
+
+  r = maybe_get_first_fn (r);
+  if (r && DECL_P (r))
+    {
+      if (!DECL_SAVED_TREE (r)
+	  && (DECL_TEMPLOID_INSTANTIATION (r) || DECL_TEMPLATE_INFO (r)))
+	instantiate_decl (r, /*defer_ok=*/false, /*expl_inst_class_mem_p=*/false);
+    }
+  if (!r || !DECL_SAVED_TREE (r)
+      || DECL_DELETED_FN (r) || DECL_DEFAULTED_FN (r))
+    return boolean_false_node;
+
+  return boolean_true_node;
+}
+
 /* Process std::meta::body_of.
    Returns: The reflection of the body of the function represented by r.
    Throws: meta::exception unless r represents a function and is defined.  */
@@ -3317,7 +3341,7 @@ eval_body_of (location_t loc, const constexpr_ctx *ctx, tree r,
 	instantiate_decl (r, /*defer_ok=*/false, /*expl_inst_class_mem_p=*/false);
     }
   tree body = DECL_SAVED_TREE (r);
-  if (!body)
+  if (!body || DECL_DELETED_FN (r) || DECL_DEFAULTED_FN (r))
     return throw_exception (loc, ctx, "function is not defined",
 			    fun, non_constant_p, jump_target);
 
@@ -9188,6 +9212,8 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
     case METAFN_RETURN_TYPE_OF:
       return eval_return_type_of (loc, ctx, h, kind, non_constant_p,
 				  jump_target, fun);
+    case METAFN_HAS_BODY:
+      return eval_has_body (h);
     case METAFN_BODY_OF:
       return eval_body_of (loc, ctx, h, non_constant_p, jump_target, fun);
     case METAFN_STATEMENTS_OF:

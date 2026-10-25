@@ -310,6 +310,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     consteval vector<info> parameters_of(info);
     consteval info variable_of(info);
     consteval info return_type_of(info);
+    consteval bool has_body(info);
     consteval info body_of(info);
     consteval vector<info> statements_of(info);
 
