@@ -3399,6 +3399,10 @@ added_statement_p (tree stmt)
   return false;
 }
 
+static tree eval_is_statement (tree);
+static tree eval_is_return_statement (tree);
+static tree eval_is_declaration_statement (tree);
+
 /* Append STMT, a statement of a block, to ELTS the way statements_of
    reports it.  */
 
@@ -3408,13 +3412,21 @@ append_block_statement (location_t loc, tree stmt,
 {
   if (stmt && added_statement_p (stmt))
     return;
+  tree orig_expr_stmt = NULL_TREE;
+  bool had_cleanup = false;
   while (stmt && (TREE_CODE (stmt) == CLEANUP_POINT_EXPR
 		  || TREE_CODE (stmt) == EXPR_STMT))
     {
       if (TREE_CODE (stmt) == CLEANUP_POINT_EXPR)
-	stmt = TREE_OPERAND (stmt, 0);
+	{
+	  had_cleanup = true;
+	  stmt = TREE_OPERAND (stmt, 0);
+	}
       else
-	stmt = EXPR_STMT_EXPR (stmt);
+	{
+	  orig_expr_stmt = stmt;
+	  stmt = EXPR_STMT_EXPR (stmt);
+	}
     }
   if (!stmt || TREE_CODE (stmt) == DEBUG_BEGIN_STMT)
     return;
@@ -3450,6 +3462,15 @@ append_block_statement (location_t loc, tree stmt,
       && VAR_P (TREE_OPERAND (init, 0))
       && !DECL_ARTIFICIAL (TREE_OPERAND (init, 0)))
     return;
+
+  if (eval_is_declaration_statement (stmt) != boolean_true_node
+      && eval_is_return_statement (stmt) != boolean_true_node)
+    {
+      if (orig_expr_stmt)
+	stmt = orig_expr_stmt;
+      else if (had_cleanup && eval_is_statement (stmt) != boolean_true_node)
+	stmt = build_stmt (EXPR_LOCATION (stmt), EXPR_STMT, stmt);
+    }
 
   CONSTRUCTOR_APPEND_ELT (*elts, NULL_TREE,
 			  get_reflection_raw (loc, stmt, REFLECT_UNDEF));
@@ -3645,14 +3666,20 @@ eval_is_statement (tree r)
     case HANDLER:
     case RETURN_EXPR:
     case LOOP_EXPR:
-    case COND_EXPR:
     case BREAK_STMT:
     case CONTINUE_STMT:
     case DECL_EXPR:
     case LABEL_EXPR:
     case CASE_LABEL_EXPR:
       return boolean_true_node;
+    case COND_EXPR:
+      return (!TREE_TYPE (r) || VOID_TYPE_P (TREE_TYPE (r)))
+	     ? boolean_true_node : boolean_false_node;
     default:
+      if (eval_is_return_statement (r) == boolean_true_node
+	  || (!VAR_P (r)
+	      && eval_is_declaration_statement (r) == boolean_true_node))
+	return boolean_true_node;
       return boolean_false_node;
     }
 }
@@ -3672,9 +3699,9 @@ eval_is_expression (tree r)
 {
   if (!r)
     return boolean_false_node;
-  tree_code code = TREE_CODE (r);
-  if (code == BIND_EXPR)
+  if (eval_is_statement (r) == boolean_true_node)
     return boolean_false_node;
+  tree_code code = TREE_CODE (r);
   if (EXPR_P (r)
       || CONSTANT_CLASS_P (r)
       || code == VAR_DECL
@@ -3775,6 +3802,10 @@ eval_is_return_statement (tree r)
 {
   if (eval_is_compound_statement (r) == boolean_true_node)
     return boolean_false_node;
+  while (r && TREE_CODE (r) == CLEANUP_POINT_EXPR)
+    r = TREE_OPERAND (r, 0);
+  if (r && TREE_CODE (r) == EXPR_STMT)
+    return boolean_false_node;
   r = unwrap_statement_wrappers (r);
   if (!r)
     return boolean_false_node;
@@ -3792,11 +3823,16 @@ eval_is_declaration_statement (tree r)
 {
   if (eval_is_compound_statement (r) == boolean_true_node)
     return boolean_false_node;
+  while (r && TREE_CODE (r) == CLEANUP_POINT_EXPR)
+    r = TREE_OPERAND (r, 0);
+  bool was_expr_stmt = (r && TREE_CODE (r) == EXPR_STMT);
   r = unwrap_statement_wrappers (r);
   if (!r)
     return boolean_false_node;
   if (nrv_init_p (r))
     return boolean_true_node;
+  if (was_expr_stmt)
+    return boolean_false_node;
   if (r && (TREE_CODE (r) == INIT_EXPR || TREE_CODE (r) == MODIFY_EXPR)
       && TREE_OPERAND_LENGTH (r) > 0
       && is_return_slot (TREE_OPERAND (r, 0)))
@@ -3811,8 +3847,6 @@ eval_is_declaration_statement (tree r)
       if (var && VAR_P (var) && !DECL_ARTIFICIAL (var))
 	return boolean_true_node;
     }
-  else if (r && VAR_P (r) && !DECL_ARTIFICIAL (r))
-    return boolean_true_node;
   return boolean_false_node;
 }
 
@@ -3974,6 +4008,56 @@ strip_return_slot_temporary (tree v)
 	return init;
     }
   return v;
+}
+
+static tree
+eval_is_expression_statement (tree r)
+{
+  if (!r
+      || eval_is_compound_statement (r) == boolean_true_node
+      || eval_is_declaration_statement (r) == boolean_true_node
+      || eval_is_return_statement (r) == boolean_true_node)
+    return boolean_false_node;
+  bool had_cleanup = false;
+  while (r && TREE_CODE (r) == CLEANUP_POINT_EXPR)
+    {
+      had_cleanup = true;
+      r = TREE_OPERAND (r, 0);
+    }
+  if (!r)
+    return boolean_false_node;
+  if (TREE_CODE (r) == EXPR_STMT)
+    return boolean_true_node;
+  if (had_cleanup
+      && eval_is_statement (r) != boolean_true_node
+      && eval_is_expression (r) == boolean_true_node)
+    return boolean_true_node;
+  return boolean_false_node;
+}
+
+static tree
+eval_expression_of (location_t loc, const constexpr_ctx *ctx, tree r,
+		    bool *non_constant_p, tree *jump_target, tree fun)
+{
+  if (eval_is_expression_statement (r) != boolean_true_node)
+    return throw_exception (loc, ctx,
+			    "reflection does not represent an expression "
+			    "statement", fun, non_constant_p, jump_target);
+  while (r && (TREE_CODE (r) == CLEANUP_POINT_EXPR
+	       || TREE_CODE (r) == EXPR_STMT
+	       || (CONVERT_EXPR_P (r) && VOID_TYPE_P (TREE_TYPE (r)))))
+    {
+      if (TREE_CODE (r) == EXPR_STMT)
+	r = EXPR_STMT_EXPR (r);
+      else
+	r = TREE_OPERAND (r, 0);
+    }
+  r = strip_return_slot_temporary (r);
+  if (!r)
+    return throw_exception (loc, ctx,
+			    "reflection does not represent an expression "
+			    "statement", fun, non_constant_p, jump_target);
+  return get_reflection_raw (loc, r, REFLECT_UNDEF);
 }
 
 static tree
@@ -4155,6 +4239,7 @@ eval_is_unary_operator (tree r)
   tree_code code = TREE_CODE (r);
   if (code < MAX_TREE_CODES
       && (TREE_CODE_CLASS (code) == tcc_unary
+	  || code == TRUTH_NOT_EXPR
 	  || code == UNARY_PLUS_EXPR
 	  || code == ADDR_EXPR
 	  || code == INDIRECT_REF
@@ -4173,7 +4258,19 @@ eval_is_binary_operator (tree r)
   if (!r)
     return boolean_false_node;
   tree_code code = TREE_CODE (r);
-  if (code < MAX_TREE_CODES && (TREE_CODE_CLASS (code) == tcc_binary || TREE_CODE_CLASS (code) == tcc_comparison))
+  if (code < MAX_TREE_CODES
+      && (TREE_CODE_CLASS (code) == tcc_binary
+	  || TREE_CODE_CLASS (code) == tcc_comparison
+	  || code == MODIFY_EXPR
+	  || code == COMPOUND_EXPR
+	  || code == TRUTH_ANDIF_EXPR
+	  || code == TRUTH_ORIF_EXPR
+	  || code == TRUTH_AND_EXPR
+	  || code == TRUTH_OR_EXPR
+	  || code == TRUTH_XOR_EXPR
+	  || code == MEMBER_REF
+	  || code == DOTSTAR_EXPR
+	  || code == ARRAY_REF))
     return boolean_true_node;
   return boolean_false_node;
 }
@@ -4262,10 +4359,23 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
   else
     {
       int len = cp_tree_operand_length (r);
+      if (code == PREINCREMENT_EXPR
+	  || code == PREDECREMENT_EXPR
+	  || code == POSTINCREMENT_EXPR
+	  || code == POSTDECREMENT_EXPR)
+	len = 1;
       for (int i = 0; i < len; ++i)
-	if (TREE_OPERAND (r, i))
-	  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-				  get_reflection_raw (loc, TREE_OPERAND (r, i), REFLECT_UNDEF));
+	if (tree op = TREE_OPERAND (r, i))
+	  {
+	    if (code == COMPOUND_EXPR
+		&& (i == 0 || VOID_TYPE_P (TREE_TYPE (r))))
+	      while (op && (TREE_CODE (op) == CLEANUP_POINT_EXPR
+			    || (CONVERT_EXPR_P (op)
+				&& VOID_TYPE_P (TREE_TYPE (op)))))
+		op = TREE_OPERAND (op, 0);
+	    CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+				    get_reflection_raw (loc, op, REFLECT_UNDEF));
+	  }
     }
 
   return get_vector_of_info_elts (elts);
@@ -9376,6 +9486,10 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
       return eval_is_statement (h);
     case METAFN_IS_COMPOUND_STATEMENT:
       return eval_is_compound_statement (h);
+    case METAFN_IS_EXPRESSION_STATEMENT:
+      return eval_is_expression_statement (h);
+    case METAFN_EXPRESSION_OF:
+      return eval_expression_of (loc, ctx, h, non_constant_p, jump_target, fun);
     case METAFN_IS_EXPRESSION:
       return eval_is_expression (h);
     case METAFN_IS_RETURN_STATEMENT:

@@ -316,6 +316,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
     consteval bool is_statement(info);
     consteval bool is_compound_statement(info);
+    consteval bool is_expression_statement(info);
+    consteval info expression_of(info);
     consteval bool is_expression(info);
     consteval bool is_return_statement(info);
     consteval bool is_declaration_statement(info);
