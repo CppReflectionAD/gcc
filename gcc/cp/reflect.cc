@@ -2502,12 +2502,46 @@ eval_is_constructor_template (tree r)
    Throws: meta::exception unless r represents an operator function or
    operator function template.  */
 
+/* True if R is an AGGR_INIT_EXPR for a call to a function that returns a
+   class by value, rather than for a constructor call.  GCC uses one for a
+   call that returns a class with a non-trivial destructor or copy
+   constructor.  */
+
+static bool
+aggr_init_call_p (tree r)
+{
+  return r && TREE_CODE (r) == AGGR_INIT_EXPR && !AGGR_INIT_VIA_CTOR_P (r);
+}
+
+/* `return f (args);` for a class type initializes a temporary in the return
+   slot from the call.  Report the call, as for any other type.  */
+
+static tree
+strip_return_slot_temporary (tree v)
+{
+  if (v && TREE_CODE (v) == TARGET_EXPR)
+    {
+      tree init = TARGET_EXPR_INITIAL (v);
+      if (init && (TREE_CODE (init) == CALL_EXPR || aggr_init_call_p (init)))
+	return init;
+    }
+  return v;
+}
+
 static tree
 eval_operator_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		  bool *non_constant_p, tree *jump_target, tree ret_type,
 		  tree fun)
 {
   maybe_init_meta_operators (loc);
+
+  tree call = r ? strip_return_slot_temporary (STRIP_REFERENCE_REF (r))
+		: NULL_TREE;
+  if (call && (TREE_CODE (call) == CALL_EXPR || aggr_init_call_p (call))
+      && CALL_EXPR_OPERATOR_SYNTAX (call))
+    if (tree fn = cp_get_callee_fndecl_nofold (call))
+      if (eval_is_operator_function (fn) == boolean_true_node)
+	r = fn;
 
   if (eval_is_operator_function (r) == boolean_true_node
       || eval_is_operator_function_template (r) == boolean_true_node)
@@ -3917,32 +3951,6 @@ eval_constant_of (location_t loc, const constexpr_ctx *ctx, tree r,
   return get_reflection_raw (loc, r, REFLECT_UNDEF);
 }
 
-/* True if R is an AGGR_INIT_EXPR for a call to a function that returns a
-   class by value, rather than for a constructor call.  GCC uses one for a
-   call that returns a class with a non-trivial destructor or copy
-   constructor.  */
-
-static bool
-aggr_init_call_p (tree r)
-{
-  return r && TREE_CODE (r) == AGGR_INIT_EXPR && !AGGR_INIT_VIA_CTOR_P (r);
-}
-
-/* `return f (args);` for a class type initializes a temporary in the return
-   slot from the call.  Report the call, as for any other type.  */
-
-static tree
-strip_return_slot_temporary (tree v)
-{
-  if (v && TREE_CODE (v) == TARGET_EXPR)
-    {
-      tree init = TARGET_EXPR_INITIAL (v);
-      if (init && (TREE_CODE (init) == CALL_EXPR || aggr_init_call_p (init)))
-	return init;
-    }
-  return v;
-}
-
 static tree
 find_var_initializer_in_scope (tree var)
 {
@@ -4158,6 +4166,8 @@ eval_expression_of (location_t loc, const constexpr_ctx *ctx, tree r,
 	r = TREE_OPERAND (r, 0);
     }
   r = strip_return_slot_temporary (r);
+  if (r && REFERENCE_REF_P (r))
+    r = TREE_OPERAND (r, 0);
   if (!r)
     return throw_exception (loc, ctx,
 			    "reflection does not represent an expression "
@@ -4379,6 +4389,48 @@ eval_is_binary_operator (tree r)
 	  || code == DOTSTAR_EXPR
 	  || code == ARRAY_REF))
     return boolean_true_node;
+  return boolean_false_node;
+}
+
+static tree
+eval_is_prefix (tree r)
+{
+  if (eval_is_expression (r) != boolean_true_node)
+    return boolean_false_node;
+  r = strip_return_slot_temporary (STRIP_REFERENCE_REF (r));
+  if (!r)
+    return boolean_false_node;
+  tree_code code = TREE_CODE (r);
+  if (code == PREINCREMENT_EXPR || code == PREDECREMENT_EXPR)
+    return boolean_true_node;
+  if ((code == CALL_EXPR || aggr_init_call_p (r))
+      && CALL_EXPR_OPERATOR_SYNTAX (r))
+    if (tree fn = cp_get_callee_fndecl_nofold (r))
+      if (DECL_OVERLOADED_OPERATOR_P (fn)
+	  && (DECL_OVERLOADED_OPERATOR_IS (fn, PREINCREMENT_EXPR)
+	      || DECL_OVERLOADED_OPERATOR_IS (fn, PREDECREMENT_EXPR)))
+	return boolean_true_node;
+  return boolean_false_node;
+}
+
+static tree
+eval_is_postfix (tree r)
+{
+  if (eval_is_expression (r) != boolean_true_node)
+    return boolean_false_node;
+  r = strip_return_slot_temporary (STRIP_REFERENCE_REF (r));
+  if (!r)
+    return boolean_false_node;
+  tree_code code = TREE_CODE (r);
+  if (code == POSTINCREMENT_EXPR || code == POSTDECREMENT_EXPR)
+    return boolean_true_node;
+  if ((code == CALL_EXPR || aggr_init_call_p (r))
+      && CALL_EXPR_OPERATOR_SYNTAX (r))
+    if (tree fn = cp_get_callee_fndecl_nofold (r))
+      if (DECL_OVERLOADED_OPERATOR_P (fn)
+	  && (DECL_OVERLOADED_OPERATOR_IS (fn, POSTINCREMENT_EXPR)
+	      || DECL_OVERLOADED_OPERATOR_IS (fn, POSTDECREMENT_EXPR)))
+	return boolean_true_node;
   return boolean_false_node;
 }
 
@@ -9621,6 +9673,10 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
       return eval_is_unary_operator (h);
     case METAFN_IS_BINARY_OPERATOR:
       return eval_is_binary_operator (h);
+    case METAFN_IS_PREFIX:
+      return eval_is_prefix (h);
+    case METAFN_IS_POSTFIX:
+      return eval_is_postfix (h);
     case METAFN_IS_FUNCTION_CALL:
       return eval_is_function_call (h);
     case METAFN_DECLARATION_OF:
