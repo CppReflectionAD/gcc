@@ -3348,6 +3348,53 @@ eval_body_of (location_t loc, const constexpr_ctx *ctx, tree r,
   return get_reflection_raw (loc, body, REFLECT_UNDEF);
 }
 
+/* True if HANDLER, the handler of a TRY_CATCH_EXPR, is a cleanup that runs
+   only when an exception is thrown, rather than the catch clauses of a try
+   block or an exception specification.  */
+
+static bool
+eh_cleanup_p (tree handler)
+{
+  if (handler && TREE_CODE (handler) == STATEMENT_LIST)
+    {
+      tree_stmt_iterator i = tsi_start (handler);
+      handler = tsi_end_p (i) ? NULL_TREE : tsi_stmt (i);
+    }
+  return !(handler && (TREE_CODE (handler) == CATCH_EXPR
+		       || TREE_CODE (handler) == EH_FILTER_EXPR));
+}
+
+/* True if STMT is a statement that the front end adds to a function body
+   and that has no counterpart in the source:
+   - the declaration of the flag that maybe_set_retval_sentinel creates for
+     a function returning a class with a non-trivial destructor;
+   - the empty statement that finalize_nrv leaves in place of the
+     declaration of the named return value, when it has no DECL_INITIAL;
+   - the call that cp_maybe_instrument_return appends to a function that
+     doesn't obviously end with a return, such as one ending in a named
+     return value's TRY_CATCH_EXPR.
+   A statement in the source is wrapped in an EXPR_STMT or a
+   CLEANUP_POINT_EXPR, so none of these bare trees can be one.  */
+
+static bool
+added_statement_p (tree stmt)
+{
+  if (TREE_CODE (stmt) == DECL_EXPR)
+    {
+      tree d = DECL_EXPR_DECL (stmt);
+      return (VAR_P (d) && DECL_ARTIFICIAL (d) && !DECL_NAME (d)
+	      && TREE_CODE (TREE_TYPE (d)) == BOOLEAN_TYPE);
+    }
+  if (IS_EMPTY_STMT (stmt))
+    return true;
+  if (TREE_CODE (stmt) == CALL_EXPR)
+    {
+      tree fn = get_callee_fndecl (stmt);
+      return fn && fndecl_built_in_p (fn);
+    }
+  return false;
+}
+
 /* Append STMT, a statement of a block, to ELTS the way statements_of
    reports it.  */
 
@@ -3355,6 +3402,8 @@ static void
 append_block_statement (location_t loc, tree stmt,
 			vec<constructor_elt, va_gc> **elts)
 {
+  if (stmt && added_statement_p (stmt))
+    return;
   while (stmt && (TREE_CODE (stmt) == BIND_EXPR
 		  || TREE_CODE (stmt) == CLEANUP_POINT_EXPR
 		  || TREE_CODE (stmt) == EXPR_STMT))
@@ -3374,8 +3423,11 @@ append_block_statement (location_t loc, tree stmt,
      the cleanup: that is how cp_genericize lowers the variable's
      CLEANUP_STMT.  C++ has no try-finally statement, so report the
      statements of the body in place, and leave out the destructor call,
-     which isn't in the source.  */
-  if (TREE_CODE (stmt) == TRY_FINALLY_EXPR)
+     which isn't in the source.  A named return value is destroyed only if
+     an exception is thrown, so its cleanup is a TRY_CATCH_EXPR instead.  */
+  if (TREE_CODE (stmt) == TRY_FINALLY_EXPR
+      || (TREE_CODE (stmt) == TRY_CATCH_EXPR
+	  && eh_cleanup_p (TREE_OPERAND (stmt, 1))))
     {
       tree body = TREE_OPERAND (stmt, 0);
       if (body && TREE_CODE (body) == STATEMENT_LIST)
@@ -3386,10 +3438,16 @@ append_block_statement (location_t loc, tree stmt,
       return;
     }
 
-  if (TREE_CODE (stmt) == INIT_EXPR
-      && TREE_OPERAND_LENGTH (stmt) > 0
-      && VAR_P (TREE_OPERAND (stmt, 0))
-      && !DECL_ARTIFICIAL (TREE_OPERAND (stmt, 0)))
+  /* The initialization of a named local is part of its declaration, which
+     the variable's DECL_EXPR reports.  For a class type it can be converted
+     to void, as in `(void) (a = make_t (x))`.  */
+  tree init = stmt;
+  while (CONVERT_EXPR_P (init) && VOID_TYPE_P (TREE_TYPE (init)))
+    init = TREE_OPERAND (init, 0);
+  if (TREE_CODE (init) == INIT_EXPR
+      && TREE_OPERAND_LENGTH (init) > 0
+      && VAR_P (TREE_OPERAND (init, 0))
+      && !DECL_ARTIFICIAL (TREE_OPERAND (init, 0)))
     return;
 
   CONSTRUCTOR_APPEND_ELT (*elts, NULL_TREE,
@@ -3644,6 +3702,55 @@ is_return_slot (tree t)
   return t && TREE_CODE (t) == RESULT_DECL;
 }
 
+/* Return the variable of a function's named return value if T is that
+   function's return slot, otherwise NULL_TREE.  finalize_nrv replaces the
+   variable with the RESULT_DECL throughout the body, gives the RESULT_DECL
+   its name, and makes the RESULT_DECL the variable's DECL_VALUE_EXPR.  */
+
+static tree
+nrv_variable (tree t)
+{
+  if (!is_return_slot (t))
+    return NULL_TREE;
+  if (TREE_CODE (t) == INDIRECT_REF)
+    t = TREE_OPERAND (t, 0);
+  tree fn = DECL_CONTEXT (t);
+  if (!DECL_NAME (t) || !fn || TREE_CODE (fn) != FUNCTION_DECL
+      || !DECL_INITIAL (fn) || TREE_CODE (DECL_INITIAL (fn)) != BLOCK)
+    return NULL_TREE;
+
+  auto_vec<tree, 8> blocks;
+  blocks.safe_push (DECL_INITIAL (fn));
+  while (!blocks.is_empty ())
+    {
+      tree block = blocks.pop ();
+      for (tree v = BLOCK_VARS (block); v; v = DECL_CHAIN (v))
+	if (VAR_P (v) && DECL_HAS_VALUE_EXPR_P (v))
+	  {
+	    tree e = DECL_VALUE_EXPR (v);
+	    if (e && TREE_CODE (e) == INDIRECT_REF)
+	      e = TREE_OPERAND (e, 0);
+	    if (e == t)
+	      return v;
+	  }
+      for (tree b = BLOCK_SUBBLOCKS (block); b; b = BLOCK_CHAIN (b))
+	blocks.safe_push (b);
+    }
+  return NULL_TREE;
+}
+
+/* True if R is the initialization of a named return value: an INIT_EXPR of
+   the return slot that is a statement of its own, not part of a return
+   statement.  */
+
+static bool
+nrv_init_p (tree r)
+{
+  return (r && TREE_CODE (r) == INIT_EXPR
+	  && TREE_OPERAND_LENGTH (r) > 0
+	  && nrv_variable (TREE_OPERAND (r, 0)));
+}
+
 static tree
 eval_is_return_statement (tree r)
 {
@@ -3653,7 +3760,8 @@ eval_is_return_statement (tree r)
   if (r && (TREE_CODE (r) == RETURN_EXPR
 	    || ((TREE_CODE (r) == INIT_EXPR || TREE_CODE (r) == MODIFY_EXPR)
 		&& TREE_OPERAND_LENGTH (r) > 0
-		&& is_return_slot (TREE_OPERAND (r, 0)))))
+		&& is_return_slot (TREE_OPERAND (r, 0))
+		&& !nrv_init_p (r))))
     return boolean_true_node;
   return boolean_false_node;
 }
@@ -3664,11 +3772,15 @@ eval_is_declaration_statement (tree r)
   r = unwrap_statement_wrappers (r);
   if (!r)
     return boolean_false_node;
+  if (nrv_init_p (r))
+    return boolean_true_node;
   if (r && (TREE_CODE (r) == INIT_EXPR || TREE_CODE (r) == MODIFY_EXPR)
       && TREE_OPERAND_LENGTH (r) > 0
       && is_return_slot (TREE_OPERAND (r, 0)))
     return boolean_false_node;
-  if (r && (TREE_CODE (r) == INIT_EXPR || TREE_CODE (r) == MODIFY_EXPR))
+  /* An INIT_EXPR initializes a variable it declares; a MODIFY_EXPR is an
+     assignment, `a = e;` or `a += e;`, which is an expression statement.  */
+  if (r && TREE_CODE (r) == INIT_EXPR)
     return boolean_true_node;
   if (r && TREE_CODE (r) == DECL_EXPR)
     {
@@ -3694,8 +3806,9 @@ eval_declared_variable_of (location_t loc, const constexpr_ctx *ctx, tree r,
     decl = DECL_EXPR_DECL (r);
   else if (r && DECL_P (r))
     decl = r;
-  else if (r && (TREE_CODE (r) == INIT_EXPR || TREE_CODE (r) == MODIFY_EXPR)
-	   && TREE_OPERAND_LENGTH (r) > 0)
+  else if (nrv_init_p (r))
+    decl = nrv_variable (TREE_OPERAND (r, 0));
+  else if (r && TREE_CODE (r) == INIT_EXPR && TREE_OPERAND_LENGTH (r) > 0)
     decl = TREE_OPERAND (r, 0);
 
   if (decl && DECL_P (decl))
@@ -3749,9 +3862,19 @@ find_var_initializer_in_scope (tree var)
 	{
 	  return walk (BIND_EXPR_BODY (stmt));
 	}
+      /* The rest of the block after a local with a non-trivial destructor
+	 is the body of a TRY_FINALLY_EXPR (or, for a named return value, a
+	 TRY_CATCH_EXPR), as in append_block_statement.  */
+      else if (TREE_CODE (stmt) == TRY_FINALLY_EXPR
+	       || TREE_CODE (stmt) == TRY_CATCH_EXPR)
+	{
+	  return walk (TREE_OPERAND (stmt, 0));
+	}
       else if (TREE_CODE (stmt) == INIT_EXPR || TREE_CODE (stmt) == MODIFY_EXPR)
 	{
-	  if (TREE_OPERAND_LENGTH (stmt) > 1 && TREE_OPERAND (stmt, 0) == target_var)
+	  if (TREE_OPERAND_LENGTH (stmt) > 1
+	      && (TREE_OPERAND (stmt, 0) == target_var
+		  || nrv_variable (TREE_OPERAND (stmt, 0)) == target_var))
 	    {
 	      found_init = TREE_OPERAND (stmt, 1);
 	      return true;
@@ -3844,6 +3967,14 @@ eval_return_operand_of (location_t loc, const constexpr_ctx *ctx, tree r,
       ret_val = unwrap_statement_wrappers (ret_val);
       if (ret_val && (TREE_CODE (ret_val) == MODIFY_EXPR || TREE_CODE (ret_val) == INIT_EXPR))
 	ret_val = strip_return_slot_temporary (TREE_OPERAND (ret_val, 1));
+      /* `return a;` of a named return value returns the return slot, which
+	 maybe_set_retval_sentinel can follow with setting its flag.  Report
+	 the variable.  */
+      if (ret_val && TREE_CODE (ret_val) == COMPOUND_EXPR
+	  && is_return_slot (TREE_OPERAND (ret_val, 0)))
+	ret_val = TREE_OPERAND (ret_val, 0);
+      if (tree var = nrv_variable (ret_val))
+	ret_val = var;
       if (ret_val)
 	return get_reflection_raw (loc, ret_val, REFLECT_UNDEF);
     }
