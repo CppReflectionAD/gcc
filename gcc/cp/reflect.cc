@@ -3851,28 +3851,60 @@ eval_is_declaration_statement (tree r)
 }
 
 static tree
+declared_var_of_stmt (tree r)
+{
+  if (eval_is_declaration_statement (r) != boolean_true_node)
+    return NULL_TREE;
+  r = unwrap_statement_wrappers (r);
+  if (!r)
+    return NULL_TREE;
+  tree decl = NULL_TREE;
+  if (TREE_CODE (r) == DECL_EXPR)
+    decl = DECL_EXPR_DECL (r);
+  else if (nrv_init_p (r))
+    decl = nrv_variable (TREE_OPERAND (r, 0));
+  else if (TREE_CODE (r) == INIT_EXPR && TREE_OPERAND_LENGTH (r) > 0)
+    decl = TREE_OPERAND (r, 0);
+  if (decl && VAR_P (decl) && !DECL_ARTIFICIAL (decl))
+    return decl;
+  return NULL_TREE;
+}
+
+static tree
+eval_is_simple_declaration (tree r)
+{
+  tree var = declared_var_of_stmt (r);
+  if (var && !DECL_DECOMPOSITION_P (var))
+    return boolean_true_node;
+  return boolean_false_node;
+}
+
+static tree
 eval_declared_variable_of (location_t loc, const constexpr_ctx *ctx, tree r,
 			   bool *non_constant_p, tree *jump_target, tree fun)
 {
-  r = unwrap_statement_wrappers (r);
-  if (!r)
-    return throw_exception (loc, ctx, "reflection does not represent a declaration statement",
-			    fun, non_constant_p, jump_target);
-  tree decl = NULL_TREE;
-  if (r && TREE_CODE (r) == DECL_EXPR)
-    decl = DECL_EXPR_DECL (r);
-  else if (r && DECL_P (r))
-    decl = r;
-  else if (nrv_init_p (r))
-    decl = nrv_variable (TREE_OPERAND (r, 0));
-  else if (r && TREE_CODE (r) == INIT_EXPR && TREE_OPERAND_LENGTH (r) > 0)
-    decl = TREE_OPERAND (r, 0);
-
-  if (decl && DECL_P (decl))
-    return get_reflection_raw (loc, decl, REFLECT_UNDEF);
+  if (eval_is_simple_declaration (r) == boolean_true_node)
+    if (tree decl = declared_var_of_stmt (r))
+      return get_reflection_raw (loc, decl, REFLECT_UNDEF);
 
   return throw_exception (loc, ctx, "reflection does not represent a declaration statement",
 			  fun, non_constant_p, jump_target);
+}
+
+static tree
+eval_declarators_of (location_t loc, const constexpr_ctx *ctx, tree r,
+		     bool *non_constant_p, tree *jump_target, tree fun)
+{
+  if (eval_is_simple_declaration (r) != boolean_true_node)
+    return throw_exception (loc, ctx,
+			    "reflection does not represent a simple "
+			    "declaration", fun, non_constant_p, jump_target);
+
+  tree decl = declared_var_of_stmt (r);
+  vec<constructor_elt, va_gc> *elts = nullptr;
+  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+			  get_reflection_raw (loc, decl, REFLECT_UNDEF));
+  return get_vector_of_info_elts (elts);
 }
 
 static tree ATTRIBUTE_UNUSED
@@ -3883,6 +3915,32 @@ eval_constant_of (location_t loc, const constexpr_ctx *ctx, tree r,
     return throw_exception (loc, ctx, "reflection does not represent a constant or literal",
 			    fun, non_constant_p, jump_target);
   return get_reflection_raw (loc, r, REFLECT_UNDEF);
+}
+
+/* True if R is an AGGR_INIT_EXPR for a call to a function that returns a
+   class by value, rather than for a constructor call.  GCC uses one for a
+   call that returns a class with a non-trivial destructor or copy
+   constructor.  */
+
+static bool
+aggr_init_call_p (tree r)
+{
+  return r && TREE_CODE (r) == AGGR_INIT_EXPR && !AGGR_INIT_VIA_CTOR_P (r);
+}
+
+/* `return f (args);` for a class type initializes a temporary in the return
+   slot from the call.  Report the call, as for any other type.  */
+
+static tree
+strip_return_slot_temporary (tree v)
+{
+  if (v && TREE_CODE (v) == TARGET_EXPR)
+    {
+      tree init = TARGET_EXPR_INITIAL (v);
+      if (init && (TREE_CODE (init) == CALL_EXPR || aggr_init_call_p (init)))
+	return init;
+    }
+  return v;
 }
 
 static tree
@@ -3927,7 +3985,47 @@ find_var_initializer_in_scope (tree var)
 	{
 	  return walk (TREE_OPERAND (stmt, 0));
 	}
-      else if (TREE_CODE (stmt) == INIT_EXPR || TREE_CODE (stmt) == MODIFY_EXPR)
+      else if (TREE_CODE (stmt) == IF_STMT)
+	{
+	  return (walk (IF_COND (stmt))
+		  || walk (THEN_CLAUSE (stmt))
+		  || walk (ELSE_CLAUSE (stmt)));
+	}
+      else if (TREE_CODE (stmt) == FOR_STMT)
+	{
+	  return (walk (FOR_INIT_STMT (stmt))
+		  || walk (FOR_COND (stmt))
+		  || walk (FOR_BODY (stmt)));
+	}
+      else if (TREE_CODE (stmt) == RANGE_FOR_STMT)
+	{
+	  return (walk (RANGE_FOR_INIT_STMT (stmt))
+		  || walk (RANGE_FOR_BODY (stmt)));
+	}
+      else if (TREE_CODE (stmt) == WHILE_STMT)
+	{
+	  return walk (WHILE_COND (stmt)) || walk (WHILE_BODY (stmt));
+	}
+      else if (TREE_CODE (stmt) == DO_STMT)
+	{
+	  return walk (DO_BODY (stmt)) || walk (DO_COND (stmt));
+	}
+      else if (TREE_CODE (stmt) == SWITCH_STMT)
+	{
+	  return (walk (SWITCH_STMT_COND (stmt))
+		  || walk (SWITCH_STMT_BODY (stmt)));
+	}
+      else if (TREE_CODE (stmt) == COND_EXPR)
+	{
+	  return (walk (TREE_OPERAND (stmt, 0))
+		  || walk (TREE_OPERAND (stmt, 1))
+		  || walk (TREE_OPERAND (stmt, 2)));
+	}
+      else if (TREE_CODE (stmt) == LOOP_EXPR)
+	{
+	  return walk (LOOP_EXPR_BODY (stmt));
+	}
+      else if (TREE_CODE (stmt) == INIT_EXPR)
 	{
 	  if (TREE_OPERAND_LENGTH (stmt) > 1
 	      && (TREE_OPERAND (stmt, 0) == target_var
@@ -3955,59 +4053,66 @@ find_var_initializer_in_scope (tree var)
 }
 
 static tree
+extract_var_initializer (tree r)
+{
+  tree init = NULL_TREE;
+  if (r && VAR_P (r))
+    init = find_var_initializer_in_scope (r);
+  else
+    {
+      tree u = unwrap_statement_wrappers (r);
+      if (u && TREE_CODE (u) == INIT_EXPR && TREE_OPERAND_LENGTH (u) > 1)
+	init = TREE_OPERAND (u, 1);
+      else if (u && TREE_CODE (u) == DECL_EXPR)
+	init = find_var_initializer_in_scope (DECL_EXPR_DECL (u));
+    }
+  while (init && (TREE_CODE (init) == CLEANUP_POINT_EXPR
+		  || TREE_CODE (init) == EXPR_STMT
+		  || TREE_CODE (init) == INIT_EXPR))
+    {
+      if (TREE_CODE (init) == EXPR_STMT)
+	init = EXPR_STMT_EXPR (init);
+      else if (TREE_CODE (init) == INIT_EXPR)
+	init = TREE_OPERAND (init, 1);
+      else
+	init = TREE_OPERAND (init, 0);
+    }
+  init = strip_return_slot_temporary (init);
+  return init;
+}
+
+static tree
 eval_initializer_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		     bool *non_constant_p, tree *jump_target, tree fun)
 {
-  if (!r)
-    return throw_exception (loc, ctx, "reflection does not represent a variable declaration",
-			    fun, non_constant_p, jump_target);
-  tree init = unwrap_statement_wrappers (r);
+  if (!r
+      || (!(VAR_P (r) && !DECL_ARTIFICIAL (r))
+	  && eval_is_simple_declaration (r) != boolean_true_node))
+    return throw_exception (loc, ctx,
+			    "reflection does not represent a variable "
+			    "declaration", fun, non_constant_p, jump_target);
 
-  if (init && (TREE_CODE (init) == INIT_EXPR || TREE_CODE (init) == MODIFY_EXPR))
-    init = TREE_OPERAND (init, 1);
-  else if (init && TREE_CODE (init) == DECL_EXPR)
-    {
-      tree var = DECL_EXPR_DECL (init);
-      init = find_var_initializer_in_scope (var);
-    }
-  else if (init && VAR_P (init))
-    init = find_var_initializer_in_scope (init);
-
-  init = unwrap_statement_wrappers (init);
-  if (init && (TREE_CODE (init) == INIT_EXPR || TREE_CODE (init) == MODIFY_EXPR))
-    init = TREE_OPERAND (init, 1);
-
+  tree init = extract_var_initializer (r);
   if (init)
     return get_reflection_raw (loc, init, REFLECT_UNDEF);
-
-  return throw_exception (loc, ctx, "reflection does not represent a variable declaration with initializer",
-			  fun, non_constant_p, jump_target);
+  return get_null_reflection ();
 }
-
-/* True if R is an AGGR_INIT_EXPR for a call to a function that returns a
-   class by value, rather than for a constructor call.  GCC uses one for a
-   call that returns a class with a non-trivial destructor or copy
-   constructor.  */
-
-static bool
-aggr_init_call_p (tree r)
-{
-  return r && TREE_CODE (r) == AGGR_INIT_EXPR && !AGGR_INIT_VIA_CTOR_P (r);
-}
-
-/* `return f (args);` for a class type initializes a temporary in the return
-   slot from the call.  Report the call, as for any other type.  */
 
 static tree
-strip_return_slot_temporary (tree v)
+eval_initializers_of (location_t loc, const constexpr_ctx *ctx, tree r,
+		      bool *non_constant_p, tree *jump_target, tree fun)
 {
-  if (v && TREE_CODE (v) == TARGET_EXPR)
-    {
-      tree init = TARGET_EXPR_INITIAL (v);
-      if (init && (TREE_CODE (init) == CALL_EXPR || aggr_init_call_p (init)))
-	return init;
-    }
-  return v;
+  if (eval_is_simple_declaration (r) != boolean_true_node)
+    return throw_exception (loc, ctx,
+			    "reflection does not represent a simple "
+			    "declaration", fun, non_constant_p, jump_target);
+
+  tree init = extract_var_initializer (r);
+  tree refl = init ? get_reflection_raw (loc, init, REFLECT_UNDEF)
+		   : get_null_reflection ();
+  vec<constructor_elt, va_gc> *elts = nullptr;
+  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE, refl);
+  return get_vector_of_info_elts (elts);
 }
 
 static tree
@@ -4071,6 +4176,8 @@ eval_return_operand_of (location_t loc, const constexpr_ctx *ctx, tree r,
   if (r && TREE_CODE (r) == RETURN_EXPR)
     {
       tree ret_val = TREE_OPERAND (r, 0);
+      if (!ret_val)
+	return get_null_reflection ();
       ret_val = unwrap_statement_wrappers (ret_val);
       if (ret_val && (TREE_CODE (ret_val) == MODIFY_EXPR || TREE_CODE (ret_val) == INIT_EXPR))
 	ret_val = strip_return_slot_temporary (TREE_OPERAND (ret_val, 1));
@@ -9496,10 +9603,16 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
       return eval_is_return_statement (h);
     case METAFN_IS_DECLARATION_STATEMENT:
       return eval_is_declaration_statement (h);
+    case METAFN_IS_SIMPLE_DECLARATION:
+      return eval_is_simple_declaration (h);
     case METAFN_DECLARED_VARIABLE_OF:
       return eval_declared_variable_of (loc, ctx, h, non_constant_p, jump_target, fun);
+    case METAFN_DECLARATORS_OF:
+      return eval_declarators_of (loc, ctx, h, non_constant_p, jump_target, fun);
     case METAFN_INITIALIZER_OF:
       return eval_initializer_of (loc, ctx, h, non_constant_p, jump_target, fun);
+    case METAFN_INITIALIZERS_OF:
+      return eval_initializers_of (loc, ctx, h, non_constant_p, jump_target, fun);
     case METAFN_RETURN_OPERAND_OF:
       return eval_return_operand_of (loc, ctx, h, non_constant_p, jump_target, fun);
     case METAFN_IS_LITERAL:

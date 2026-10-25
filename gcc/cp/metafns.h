@@ -294,8 +294,11 @@ enum metafn_code {
   METAFN_IS_EXPRESSION,
   METAFN_IS_RETURN_STATEMENT,
   METAFN_IS_DECLARATION_STATEMENT,
+  METAFN_IS_SIMPLE_DECLARATION,
   METAFN_DECLARED_VARIABLE_OF,
+  METAFN_DECLARATORS_OF,
   METAFN_INITIALIZER_OF,
+  METAFN_INITIALIZERS_OF,
   METAFN_RETURN_OPERAND_OF,
   METAFN_IS_LITERAL,
   METAFN_IS_UNARY_OPERATOR,
@@ -514,7 +517,7 @@ enum metafn_kind {
     = (METAFN_KIND_ARGS_INPUT_RANGE << METAFN_KIND_SHIFT)
       | METAFN_KIND_RET_U8STRING_VIEW
 };
-#line 491 "metafns.gperf"
+#line 494 "metafns.gperf"
 struct metafn_info
 {
   /* A name within "std::meta::" (or "std::meta::access_context::").  */
@@ -550,10 +553,10 @@ metafn_lookup::hash (const char *str, size_t len)
       1002, 1002, 1002, 1002, 1002, 1002, 1002, 1002, 1002, 1002,
       1002, 1002, 1002, 1002, 1002, 1002, 1002, 1002, 1002, 1002,
       1002, 1002, 1002, 1002, 1002, 1002, 1002, 1002, 1002, 1002,
-      1002, 1002, 1002, 1002, 1002,    5,  215,  105,   10,   45,
-       145,    5,   55,   10,  100,   20,  270,    0,  150,  110,
-         0,  275,    0,   10,   35,   55,   25,  145,    5,  185,
-         5,  395,   85, 1002, 1002, 1002, 1002, 1002, 1002, 1002,
+      1002, 1002, 1002, 1002, 1002,    5,   50,  105,   10,   45,
+       145,    5,   55,   10,  100,   20,  300,    0,  150,  110,
+         0,  275,    0,   10,   35,   55,   25,  145,    5,  205,
+         5,  395,  125, 1002, 1002, 1002, 1002, 1002, 1002, 1002,
       1002, 1002, 1002, 1002, 1002, 1002, 1002, 1002, 1002, 1002,
       1002, 1002, 1002, 1002, 1002, 1002, 1002, 1002, 1002, 1002,
       1002, 1002, 1002, 1002, 1002, 1002, 1002, 1002, 1002, 1002,
@@ -625,7 +628,7 @@ metafn_lookup::find (const char *str, size_t len)
 {
   enum
     {
-      TOTAL_KEYWORDS = 262,
+      TOTAL_KEYWORDS = 265,
       MIN_WORD_LENGTH = 4,
       MAX_WORD_LENGTH = 40,
       MIN_HASH_VALUE = 39,
@@ -638,529 +641,535 @@ metafn_lookup::find (const char *str, size_t len)
 #endif
   static const struct metafn_info wordlist[] =
     {
-#line 697 "metafns.gperf"
-      {"rank", METAFN_RANK, METAFN_KIND_SIZE_T_TINFO,},
-#line 627 "metafns.gperf"
-      {"is_void_type", METAFN_IS_VOID_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 632 "metafns.gperf"
-      {"is_pointer_type", METAFN_IS_POINTER_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 532 "metafns.gperf"
-      {"is_volatile", METAFN_IS_VOLATILE, METAFN_KIND_BOOL_INFO,},
-#line 578 "metafns.gperf"
-      {"is_value", METAFN_IS_VALUE, METAFN_KIND_BOOL_INFO,},
-#line 585 "metafns.gperf"
-      {"is_base", METAFN_IS_BASE, METAFN_KIND_BOOL_INFO,},
-#line 546 "metafns.gperf"
-      {"is_variable", METAFN_IS_VARIABLE, METAFN_KIND_BOOL_INFO,},
-#line 703 "metafns.gperf"
-      {"is_nothrow_convertible_type", METAFN_IS_NOTHROW_CONVERTIBLE_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
-#line 682 "metafns.gperf"
-      {"is_nothrow_constructible_type", METAFN_IS_NOTHROW_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO_REFLECTION_RANGET,},
-#line 708 "metafns.gperf"
-      {"is_nothrow_invocable_type", METAFN_IS_NOTHROW_INVOCABLE_TYPE, METAFN_KIND_BOOL_TINFO_REFLECTION_RANGET,},
-#line 687 "metafns.gperf"
-      {"is_nothrow_copy_assignable_type", METAFN_IS_NOTHROW_COPY_ASSIGNABLE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 709 "metafns.gperf"
-      {"is_nothrow_invocable_r_type", METAFN_IS_NOTHROW_INVOCABLE_R_TYPE, METAFN_KIND_BOOL_TINFO_TINFO_REFLECTION_RANGET,},
-#line 684 "metafns.gperf"
-      {"is_nothrow_copy_constructible_type", METAFN_IS_NOTHROW_COPY_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
 #line 700 "metafns.gperf"
-      {"is_base_of_type", METAFN_IS_BASE_OF_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
-#line 688 "metafns.gperf"
-      {"is_nothrow_move_assignable_type", METAFN_IS_NOTHROW_MOVE_ASSIGNABLE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 685 "metafns.gperf"
-      {"is_nothrow_move_constructible_type", METAFN_IS_NOTHROW_MOVE_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 570 "metafns.gperf"
-      {"is_variable_template", METAFN_IS_VARIABLE_TEMPLATE, METAFN_KIND_BOOL_INFO,},
-#line 628 "metafns.gperf"
-      {"is_null_pointer_type", METAFN_IS_NULL_POINTER_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 515 "metafns.gperf"
-      {"is_public", METAFN_IS_PUBLIC, METAFN_KIND_BOOL_INFO,},
-#line 527 "metafns.gperf"
-      {"is_noexcept", METAFN_IS_NOEXCEPT, METAFN_KIND_BOOL_INFO,},
-#line 616 "metafns.gperf"
-      {"extract", METAFN_EXTRACT, METAFN_KIND_TEMPLATE_PARM_INFO,},
-#line 736 "metafns.gperf"
-      {"variant_alternative", METAFN_VARIANT_ALTERNATIVE, METAFN_KIND_INFO_SIZE_T_TINFO,},
-#line 654 "metafns.gperf"
-      {"is_polymorphic_type", METAFN_IS_POLYMORPHIC_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 517 "metafns.gperf"
-      {"is_private", METAFN_IS_PRIVATE, METAFN_KIND_BOOL_INFO,},
-#line 551 "metafns.gperf"
-      {"is_function", METAFN_IS_FUNCTION, METAFN_KIND_BOOL_INFO,},
-#line 548 "metafns.gperf"
-      {"is_namespace", METAFN_IS_NAMESPACE, METAFN_KIND_BOOL_INFO,},
-#line 705 "metafns.gperf"
-      {"is_pointer_interconvertible_base_of_type", METAFN_IS_POINTER_INTERCONVERTIBLE_BASE_OF_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
-#line 661 "metafns.gperf"
-      {"is_bounded_array_type", METAFN_IS_BOUNDED_ARRAY_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 531 "metafns.gperf"
-      {"is_const", METAFN_IS_CONST, METAFN_KIND_BOOL_INFO,},
-#line 577 "metafns.gperf"
-      {"is_concept", METAFN_IS_CONCEPT, METAFN_KIND_BOOL_INFO,},
-#line 699 "metafns.gperf"
-      {"is_same_type", METAFN_IS_SAME_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
-#line 607 "metafns.gperf"
-      {"bases_of", METAFN_BASES_OF, METAFN_KIND_VECTOR_INFO_INFO_ACCESS_CONTEXT,},
-#line 756 "metafns.gperf"
-      {"is_cast", METAFN_IS_CAST, METAFN_KIND_BOOL_INFO,},
-#line 569 "metafns.gperf"
-      {"is_function_template", METAFN_IS_FUNCTION_TEMPLATE, METAFN_KIND_BOOL_INFO,},
-#line 686 "metafns.gperf"
-      {"is_nothrow_assignable_type", METAFN_IS_NOTHROW_ASSIGNABLE_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
-#line 552 "metafns.gperf"
-      {"is_conversion_function", METAFN_IS_CONVERSION_FUNCTION, METAFN_KIND_BOOL_INFO,},
-#line 691 "metafns.gperf"
-      {"is_nothrow_destructible_type", METAFN_IS_NOTHROW_DESTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 702 "metafns.gperf"
-      {"is_convertible_type", METAFN_IS_CONVERTIBLE_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
-#line 692 "metafns.gperf"
-      {"is_implicit_lifetime_type", METAFN_IS_IMPLICIT_LIFETIME_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 568 "metafns.gperf"
-      {"is_template", METAFN_IS_TEMPLATE, METAFN_KIND_BOOL_INFO,},
-#line 683 "metafns.gperf"
-      {"is_nothrow_default_constructible_type", METAFN_IS_NOTHROW_DEFAULT_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 617 "metafns.gperf"
-      {"can_substitute", METAFN_CAN_SUBSTITUTE, METAFN_KIND_BOOL_INFO_REFLECTION_RANGE,},
-#line 573 "metafns.gperf"
-      {"is_conversion_function_template", METAFN_IS_CONVERSION_FUNCTION_TEMPLATE, METAFN_KIND_BOOL_INFO,},
-#line 504 "metafns.gperf"
-      {"symbol_of", METAFN_SYMBOL_OF, METAFN_KIND_STRING_VIEW_OPERATORS,},
-#line 666 "metafns.gperf"
-      {"is_copy_constructible_type", METAFN_IS_COPY_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 540 "metafns.gperf"
-      {"has_module_linkage", METAFN_HAS_MODULE_LINKAGE, METAFN_KIND_BOOL_INFO,},
-#line 735 "metafns.gperf"
-      {"variant_size", METAFN_VARIANT_SIZE, METAFN_KIND_SIZE_T_TINFO,},
-#line 547 "metafns.gperf"
-      {"is_type", METAFN_IS_TYPE, METAFN_KIND_BOOL_INFO,},
-#line 664 "metafns.gperf"
-      {"is_constructible_type", METAFN_IS_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO_REFLECTION_RANGET,},
-#line 757 "metafns.gperf"
-      {"is_construct", METAFN_IS_CONSTRUCT, METAFN_KIND_BOOL_INFO,},
-#line 669 "metafns.gperf"
-      {"is_copy_assignable_type", METAFN_IS_COPY_ASSIGNABLE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 587 "metafns.gperf"
-      {"has_parent", METAFN_HAS_PARENT, METAFN_KIND_BOOL_INFO,},
-#line 567 "metafns.gperf"
-      {"is_vararg_function", METAFN_IS_VARARG_FUNCTION, METAFN_KIND_BOOL_INFO,},
-#line 558 "metafns.gperf"
-      {"is_copy_constructor", METAFN_IS_COPY_CONSTRUCTOR, METAFN_KIND_BOOL_INFO,},
-#line 594 "metafns.gperf"
-      {"variable_of", METAFN_VARIABLE_OF, METAFN_KIND_INFO_INFO,},
-#line 641 "metafns.gperf"
-      {"is_reflection_type", METAFN_IS_REFLECTION_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 690 "metafns.gperf"
-      {"is_nothrow_swappable_type", METAFN_IS_NOTHROW_SWAPPABLE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 615 "metafns.gperf"
-      {"bit_size_of", METAFN_BIT_SIZE_OF, METAFN_KIND_SIZE_T_INFO,},
-#line 561 "metafns.gperf"
-      {"is_copy_assignment", METAFN_IS_COPY_ASSIGNMENT, METAFN_KIND_BOOL_INFO,},
-#line 689 "metafns.gperf"
-      {"is_nothrow_swappable_with_type", METAFN_IS_NOTHROW_SWAPPABLE_WITH_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
-#line 762 "metafns.gperf"
-      {"current", METAFN_ACCESS_CONTEXT_CURRENT, METAFN_KIND_ACCESS_CONTEXT_VOID,},
-#line 743 "metafns.gperf"
-      {"expression_of", METAFN_EXPRESSION_OF, METAFN_KIND_INFO_INFO,},
-#line 603 "metafns.gperf"
-      {"current_function", METAFN_CURRENT_FUNCTION, METAFN_KIND_INFO_VOID,},
-#line 576 "metafns.gperf"
-      {"is_constructor_template", METAFN_IS_CONSTRUCTOR_TEMPLATE, METAFN_KIND_BOOL_INFO,},
-#line 538 "metafns.gperf"
-      {"has_automatic_storage_duration", METAFN_HAS_AUTOMATIC_STORAGE_DURATION, METAFN_KIND_BOOL_INFO,},
-#line 727 "metafns.gperf"
-      {"common_type", METAFN_COMMON_TYPE, METAFN_KIND_INFO_REFLECTION_RANGET,},
-#line 593 "metafns.gperf"
-      {"parameters_of", METAFN_PARAMETERS_OF, METAFN_KIND_VECTOR_INFO_INFO,},
-#line 728 "metafns.gperf"
-      {"common_reference", METAFN_COMMON_REFERENCE, METAFN_KIND_INFO_REFLECTION_RANGET,},
-#line 668 "metafns.gperf"
-      {"is_assignable_type", METAFN_IS_ASSIGNABLE_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
-#line 560 "metafns.gperf"
-      {"is_assignment", METAFN_IS_ASSIGNMENT, METAFN_KIND_BOOL_INFO,},
-#line 556 "metafns.gperf"
-      {"is_constructor", METAFN_IS_CONSTRUCTOR, METAFN_KIND_BOOL_INFO,},
-#line 667 "metafns.gperf"
-      {"is_move_constructible_type", METAFN_IS_MOVE_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 724 "metafns.gperf"
-      {"add_pointer", METAFN_ADD_POINTER, METAFN_KIND_INFO_TINFO,},
-#line 642 "metafns.gperf"
-      {"is_reference_type", METAFN_IS_REFERENCE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 586 "metafns.gperf"
-      {"has_default_member_initializer", METAFN_HAS_DEFAULT_MEMBER_INITIALIZER, METAFN_KIND_BOOL_INFO,},
-#line 598 "metafns.gperf"
-      {"statements_of", METAFN_STATEMENTS_OF, METAFN_KIND_VECTOR_INFO_INFO,},
-#line 648 "metafns.gperf"
-      {"is_member_pointer_type", METAFN_IS_MEMBER_POINTER_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 670 "metafns.gperf"
-      {"is_move_assignable_type", METAFN_IS_MOVE_ASSIGNABLE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 566 "metafns.gperf"
-      {"has_default_argument", METAFN_HAS_DEFAULT_ARGUMENT, METAFN_KIND_BOOL_INFO,},
-#line 731 "metafns.gperf"
-      {"unwrap_reference", METAFN_UNWRAP_REFERENCE, METAFN_KIND_INFO_TINFO,},
-#line 549 "metafns.gperf"
-      {"is_type_alias", METAFN_IS_TYPE_ALIAS, METAFN_KIND_BOOL_INFO,},
-#line 559 "metafns.gperf"
-      {"is_move_constructor", METAFN_IS_MOVE_CONSTRUCTOR, METAFN_KIND_BOOL_INFO,},
-#line 555 "metafns.gperf"
-      {"is_special_member_function", METAFN_IS_SPECIAL_MEMBER_FUNCTION, METAFN_KIND_BOOL_INFO,},
-#line 562 "metafns.gperf"
-      {"is_move_assignment", METAFN_IS_MOVE_ASSIGNMENT, METAFN_KIND_BOOL_INFO,},
-#line 729 "metafns.gperf"
-      {"underlying_type", METAFN_UNDERLYING_TYPE, METAFN_KIND_INFO_TINFO,},
-#line 643 "metafns.gperf"
-      {"is_arithmetic_type", METAFN_IS_ARITHMETIC_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 745 "metafns.gperf"
-      {"is_return_statement", METAFN_IS_RETURN_STATEMENT, METAFN_KIND_BOOL_INFO,},
-#line 581 "metafns.gperf"
-      {"is_class_member", METAFN_IS_CLASS_MEMBER, METAFN_KIND_BOOL_INFO,},
-#line 543 "metafns.gperf"
-      {"has_linkage", METAFN_HAS_LINKAGE, METAFN_KIND_BOOL_INFO,},
-#line 516 "metafns.gperf"
-      {"is_protected", METAFN_IS_PROTECTED, METAFN_KIND_BOOL_INFO,},
-#line 507 "metafns.gperf"
-      {"identifier_of", METAFN_IDENTIFIER_OF, METAFN_KIND_STRING_VIEW_INFO,},
-#line 582 "metafns.gperf"
-      {"is_namespace_member", METAFN_IS_NAMESPACE_MEMBER, METAFN_KIND_BOOL_INFO,},
-#line 606 "metafns.gperf"
-      {"members_of", METAFN_MEMBERS_OF, METAFN_KIND_VECTOR_INFO_INFO_ACCESS_CONTEXT,},
-#line 564 "metafns.gperf"
-      {"is_function_parameter", METAFN_IS_FUNCTION_PARAMETER, METAFN_KIND_BOOL_INFO,},
-#line 583 "metafns.gperf"
-      {"is_nonstatic_data_member", METAFN_IS_NONSTATIC_DATA_MEMBER, METAFN_KIND_BOOL_INFO,},
-#line 733 "metafns.gperf"
-      {"tuple_size", METAFN_TUPLE_SIZE, METAFN_KIND_SIZE_T_TINFO,},
-#line 718 "metafns.gperf"
-      {"add_rvalue_reference", METAFN_ADD_RVALUE_REFERENCE, METAFN_KIND_INFO_TINFO,},
-#line 550 "metafns.gperf"
-      {"is_namespace_alias", METAFN_IS_NAMESPACE_ALIAS, METAFN_KIND_BOOL_INFO,},
-#line 644 "metafns.gperf"
-      {"is_fundamental_type", METAFN_IS_FUNDAMENTAL_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 704 "metafns.gperf"
-      {"is_layout_compatible_type", METAFN_IS_LAYOUT_COMPATIBLE_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
-#line 591 "metafns.gperf"
-      {"template_of", METAFN_TEMPLATE_OF, METAFN_KIND_INFO_INFO,},
-#line 740 "metafns.gperf"
-      {"is_statement", METAFN_IS_STATEMENT, METAFN_KIND_BOOL_INFO,},
-#line 665 "metafns.gperf"
-      {"is_default_constructible_type", METAFN_IS_DEFAULT_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 761 "metafns.gperf"
-      {"false_expression_of", METAFN_FALSE_EXPRESSION_OF, METAFN_KIND_INFO_INFO,},
-#line 715 "metafns.gperf"
-      {"add_cv", METAFN_ADD_CV, METAFN_KIND_INFO_TINFO,},
-#line 605 "metafns.gperf"
-      {"current_namespace", METAFN_CURRENT_NAMESPACE, METAFN_KIND_INFO_VOID,},
-#line 646 "metafns.gperf"
-      {"is_scalar_type", METAFN_IS_SCALAR_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 618 "metafns.gperf"
-      {"substitute", METAFN_SUBSTITUTE, METAFN_KIND_INFO_INFO_REFLECTION_RANGE,},
-#line 734 "metafns.gperf"
-      {"tuple_element", METAFN_TUPLE_ELEMENT, METAFN_KIND_INFO_SIZE_T_TINFO,},
-#line 621 "metafns.gperf"
-      {"reflect_function", METAFN_REFLECT_FUNCTION, METAFN_KIND_INFO_TEMPLATE_PARM_REF,},
-#line 672 "metafns.gperf"
-      {"is_swappable_type", METAFN_IS_SWAPPABLE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 741 "metafns.gperf"
-      {"is_compound_statement", METAFN_IS_COMPOUND_STATEMENT, METAFN_KIND_BOOL_INFO,},
-#line 557 "metafns.gperf"
-      {"is_default_constructor", METAFN_IS_DEFAULT_CONSTRUCTOR, METAFN_KIND_BOOL_INFO,},
-#line 658 "metafns.gperf"
-      {"is_structural_type", METAFN_IS_STRUCTURAL_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 713 "metafns.gperf"
-      {"add_const", METAFN_ADD_CONST, METAFN_KIND_INFO_TINFO,},
-#line 737 "metafns.gperf"
-      {"type_order", METAFN_TYPE_ORDER, METAFN_KIND_STRONG_ORDERING_TINFO_TINFO,},
-#line 580 "metafns.gperf"
-      {"is_structured_binding", METAFN_IS_STRUCTURED_BINDING, METAFN_KIND_BOOL_INFO,},
-#line 563 "metafns.gperf"
-      {"is_destructor", METAFN_IS_DESTRUCTOR, METAFN_KIND_BOOL_INFO,},
-#line 746 "metafns.gperf"
-      {"is_declaration_statement", METAFN_IS_DECLARATION_STATEMENT, METAFN_KIND_BOOL_INFO,},
-#line 657 "metafns.gperf"
-      {"is_aggregate_type", METAFN_IS_AGGREGATE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 599 "metafns.gperf"
-      {"is_accessible", METAFN_IS_ACCESSIBLE, METAFN_KIND_BOOL_INFO_ACCESS_CONTEXT,},
-#line 533 "metafns.gperf"
-      {"is_mutable_member", METAFN_IS_MUTABLE_MEMBER, METAFN_KIND_BOOL_INFO,},
-#line 717 "metafns.gperf"
-      {"add_lvalue_reference", METAFN_ADD_LVALUE_REFERENCE, METAFN_KIND_INFO_TINFO,},
-#line 512 "metafns.gperf"
-      {"type_of", METAFN_TYPE_OF, METAFN_KIND_INFO_INFO,},
-#line 604 "metafns.gperf"
-      {"current_class", METAFN_CURRENT_CLASS, METAFN_KIND_INFO_VOID,},
-#line 634 "metafns.gperf"
-      {"is_rvalue_reference_type", METAFN_IS_RVALUE_REFERENCE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 698 "metafns.gperf"
-      {"extent", METAFN_EXTENT, METAFN_KIND_SIZE_T_TINFO_UNSIGNED,},
-#line 637 "metafns.gperf"
-      {"is_enum_type", METAFN_IS_ENUM_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 636 "metafns.gperf"
-      {"is_member_function_pointer_type", METAFN_IS_MEMBER_FUNCTION_POINTER_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 651 "metafns.gperf"
-      {"is_trivially_copyable_type", METAFN_IS_TRIVIALLY_COPYABLE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 519 "metafns.gperf"
-      {"is_pure_virtual", METAFN_IS_PURE_VIRTUAL, METAFN_KIND_BOOL_INFO,},
-#line 674 "metafns.gperf"
-      {"is_trivially_constructible_type", METAFN_IS_TRIVIALLY_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO_REFLECTION_RANGET,},
-#line 679 "metafns.gperf"
-      {"is_trivially_copy_assignable_type", METAFN_IS_TRIVIALLY_COPY_ASSIGNABLE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 676 "metafns.gperf"
-      {"is_trivially_copy_constructible_type", METAFN_IS_TRIVIALLY_COPY_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 613 "metafns.gperf"
-      {"size_of", METAFN_SIZE_OF, METAFN_KIND_SIZE_T_INFO,},
-#line 545 "metafns.gperf"
-      {"is_enumerable_type", METAFN_IS_ENUMERABLE_TYPE, METAFN_KIND_BOOL_INFO,},
-#line 510 "metafns.gperf"
-      {"u8display_string_of", METAFN_U8DISPLAY_STRING_OF, METAFN_KIND_U8STRING_VIEW_INFO,},
-#line 588 "metafns.gperf"
-      {"parent_of", METAFN_PARENT_OF, METAFN_KIND_INFO_INFO,},
-#line 611 "metafns.gperf"
-      {"enumerators_of", METAFN_ENUMERATORS_OF, METAFN_KIND_VECTOR_INFO_INFO,},
-#line 753 "metafns.gperf"
-      {"is_function_call", METAFN_IS_FUNCTION_CALL, METAFN_KIND_BOOL_INFO,},
-#line 571 "metafns.gperf"
-      {"is_class_template", METAFN_IS_CLASS_TEMPLATE, METAFN_KIND_BOOL_INFO,},
-#line 592 "metafns.gperf"
-      {"template_arguments_of", METAFN_TEMPLATE_ARGUMENTS_OF, METAFN_KIND_VECTOR_INFO_INFO,},
-#line 663 "metafns.gperf"
-      {"is_scoped_enum_type", METAFN_IS_SCOPED_ENUM_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 595 "metafns.gperf"
-      {"return_type_of", METAFN_RETURN_TYPE_OF, METAFN_KIND_INFO_INFO,},
-#line 514 "metafns.gperf"
-      {"constant_of", METAFN_CONSTANT_OF, METAFN_KIND_INFO_INFO,},
-#line 509 "metafns.gperf"
-      {"display_string_of", METAFN_DISPLAY_STRING_OF, METAFN_KIND_STRING_VIEW_INFO,},
-#line 529 "metafns.gperf"
-      {"is_enumerator", METAFN_IS_ENUMERATOR, METAFN_KIND_BOOL_INFO,},
-#line 579 "metafns.gperf"
-      {"is_object", METAFN_IS_OBJECT, METAFN_KIND_BOOL_INFO,},
-#line 522 "metafns.gperf"
-      {"is_deleted", METAFN_IS_DELETED, METAFN_KIND_BOOL_INFO,},
-#line 622 "metafns.gperf"
-      {"reflect_constant_string", METAFN_REFLECT_CONSTANT_STRING, METAFN_KIND_INFO_INPUT_RANGE,},
-#line 523 "metafns.gperf"
-      {"is_defaulted", METAFN_IS_DEFAULTED, METAFN_KIND_BOOL_INFO,},
-#line 701 "metafns.gperf"
-      {"is_virtual_base_of_type", METAFN_IS_VIRTUAL_BASE_OF_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
-#line 625 "metafns.gperf"
-      {"is_data_member_spec", METAFN_IS_DATA_MEMBER_SPEC, METAFN_KIND_BOOL_INFO,},
-#line 619 "metafns.gperf"
-      {"reflect_constant", METAFN_REFLECT_CONSTANT, METAFN_KIND_INFO_TEMPLATE_PARM,},
-#line 678 "metafns.gperf"
-      {"is_trivially_assignable_type", METAFN_IS_TRIVIALLY_ASSIGNABLE_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
-#line 645 "metafns.gperf"
-      {"is_object_type", METAFN_IS_OBJECT_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 584 "metafns.gperf"
-      {"is_static_member", METAFN_IS_STATIC_MEMBER, METAFN_KIND_BOOL_INFO,},
-#line 659 "metafns.gperf"
-      {"is_signed_type", METAFN_IS_SIGNED_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 680 "metafns.gperf"
-      {"is_trivially_move_assignable_type", METAFN_IS_TRIVIALLY_MOVE_ASSIGNABLE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 677 "metafns.gperf"
-      {"is_trivially_move_constructible_type", METAFN_IS_TRIVIALLY_MOVE_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 572 "metafns.gperf"
-      {"is_alias_template", METAFN_IS_ALIAS_TEMPLATE, METAFN_KIND_BOOL_INFO,},
-#line 673 "metafns.gperf"
-      {"is_destructible_type", METAFN_IS_DESTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 633 "metafns.gperf"
-      {"is_lvalue_reference_type", METAFN_IS_LVALUE_REFERENCE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 542 "metafns.gperf"
-      {"has_c_language_linkage", METAFN_HAS_C_LANGUAGE_LINKAGE, METAFN_KIND_BOOL_INFO,},
-#line 754 "metafns.gperf"
-      {"declaration_of", METAFN_DECLARATION_OF, METAFN_KIND_INFO_INFO,},
-#line 681 "metafns.gperf"
-      {"is_trivially_destructible_type", METAFN_IS_TRIVIALLY_DESTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 525 "metafns.gperf"
-      {"is_user_declared", METAFN_IS_USER_DECLARED, METAFN_KIND_BOOL_INFO,},
-#line 530 "metafns.gperf"
-      {"is_annotation", METAFN_IS_ANNOTATION, METAFN_KIND_BOOL_INFO,},
-#line 536 "metafns.gperf"
-      {"has_static_storage_duration", METAFN_HAS_STATIC_STORAGE_DURATION, METAFN_KIND_BOOL_INFO,},
-#line 653 "metafns.gperf"
-      {"is_empty_type", METAFN_IS_EMPTY_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 675 "metafns.gperf"
-      {"is_trivially_default_constructible_type", METAFN_IS_TRIVIALLY_DEFAULT_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 541 "metafns.gperf"
-      {"has_external_linkage", METAFN_HAS_EXTERNAL_LINKAGE, METAFN_KIND_BOOL_INFO,},
-#line 503 "metafns.gperf"
-      {"operator_of", METAFN_OPERATOR_OF, METAFN_KIND_OPERATORS_INFO,},
-#line 755 "metafns.gperf"
-      {"operands_of", METAFN_OPERANDS_OF, METAFN_KIND_VECTOR_INFO_INFO,},
-#line 671 "metafns.gperf"
-      {"is_swappable_with_type", METAFN_IS_SWAPPABLE_WITH_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
-#line 650 "metafns.gperf"
-      {"is_volatile_type", METAFN_IS_VOLATILE_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 610 "metafns.gperf"
-      {"subobjects_of", METAFN_SUBOBJECTS_OF, METAFN_KIND_VECTOR_INFO_INFO_ACCESS_CONTEXT,},
-#line 612 "metafns.gperf"
-      {"offset_of", METAFN_OFFSET_OF, METAFN_KIND_MEMBER_OFFSET_INFO,},
-#line 744 "metafns.gperf"
-      {"is_expression", METAFN_IS_EXPRESSION, METAFN_KIND_BOOL_INFO,},
-#line 535 "metafns.gperf"
-      {"is_rvalue_reference_qualified", METAFN_IS_RVALUE_REFERENCE_QUALIFIED, METAFN_KIND_BOOL_INFO,},
-#line 518 "metafns.gperf"
-      {"is_virtual", METAFN_IS_VIRTUAL, METAFN_KIND_BOOL_INFO,},
-#line 590 "metafns.gperf"
-      {"has_template_arguments", METAFN_HAS_TEMPLATE_ARGUMENTS, METAFN_KIND_BOOL_INFO,},
-#line 714 "metafns.gperf"
-      {"add_volatile", METAFN_ADD_VOLATILE, METAFN_KIND_INFO_TINFO,},
-#line 694 "metafns.gperf"
-      {"has_unique_object_representations", METAFN_HAS_UNIQUE_OBJECT_REPRESENTATIONS, METAFN_KIND_BOOL_TINFO,},
-#line 748 "metafns.gperf"
-      {"initializer_of", METAFN_INITIALIZER_OF, METAFN_KIND_INFO_INFO,},
-#line 649 "metafns.gperf"
-      {"is_const_type", METAFN_IS_CONST_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 526 "metafns.gperf"
-      {"is_explicit", METAFN_IS_EXPLICIT, METAFN_KIND_BOOL_INFO,},
-#line 575 "metafns.gperf"
-      {"is_literal_operator_template", METAFN_IS_LITERAL_OPERATOR_TEMPLATE, METAFN_KIND_BOOL_INFO,},
-#line 544 "metafns.gperf"
-      {"is_complete_type", METAFN_IS_COMPLETE_TYPE, METAFN_KIND_BOOL_INFO,},
-#line 749 "metafns.gperf"
-      {"return_operand_of", METAFN_RETURN_OPERAND_OF, METAFN_KIND_INFO_INFO,},
-#line 720 "metafns.gperf"
-      {"make_unsigned", METAFN_MAKE_UNSIGNED, METAFN_KIND_INFO_TINFO,},
-#line 513 "metafns.gperf"
-      {"object_of", METAFN_OBJECT_OF, METAFN_KIND_INFO_INFO,},
-#line 742 "metafns.gperf"
-      {"is_expression_statement", METAFN_IS_EXPRESSION_STATEMENT, METAFN_KIND_BOOL_INFO,},
-#line 640 "metafns.gperf"
-      {"is_function_type", METAFN_IS_FUNCTION_TYPE, METAFN_KIND_BOOL_TINFO,},
+      {"rank", METAFN_RANK, METAFN_KIND_SIZE_T_TINFO,},
 #line 630 "metafns.gperf"
-      {"is_floating_point_type", METAFN_IS_FLOATING_POINT_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 652 "metafns.gperf"
-      {"is_standard_layout_type", METAFN_IS_STANDARD_LAYOUT_TYPE, METAFN_KIND_BOOL_TINFO,},
+      {"is_void_type", METAFN_IS_VOID_TYPE, METAFN_KIND_BOOL_TINFO,},
 #line 635 "metafns.gperf"
-      {"is_member_object_pointer_type", METAFN_IS_MEMBER_OBJECT_POINTER_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 520 "metafns.gperf"
-      {"is_override", METAFN_IS_OVERRIDE, METAFN_KIND_BOOL_INFO,},
-#line 693 "metafns.gperf"
-      {"has_virtual_destructor", METAFN_HAS_VIRTUAL_DESTRUCTOR, METAFN_KIND_BOOL_TINFO,},
-#line 521 "metafns.gperf"
-      {"is_final", METAFN_IS_FINAL, METAFN_KIND_BOOL_INFO,},
-#line 554 "metafns.gperf"
-      {"is_literal_operator", METAFN_IS_LITERAL_OPERATOR, METAFN_KIND_BOOL_INFO,},
-#line 553 "metafns.gperf"
-      {"is_operator_function", METAFN_IS_OPERATOR_FUNCTION, METAFN_KIND_BOOL_INFO,},
-#line 712 "metafns.gperf"
-      {"remove_cv", METAFN_REMOVE_CV, METAFN_KIND_INFO_TINFO,},
+      {"is_pointer_type", METAFN_IS_POINTER_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 535 "metafns.gperf"
+      {"is_volatile", METAFN_IS_VOLATILE, METAFN_KIND_BOOL_INFO,},
+#line 581 "metafns.gperf"
+      {"is_value", METAFN_IS_VALUE, METAFN_KIND_BOOL_INFO,},
+#line 588 "metafns.gperf"
+      {"is_base", METAFN_IS_BASE, METAFN_KIND_BOOL_INFO,},
+#line 549 "metafns.gperf"
+      {"is_variable", METAFN_IS_VARIABLE, METAFN_KIND_BOOL_INFO,},
 #line 706 "metafns.gperf"
-      {"is_invocable_type", METAFN_IS_INVOCABLE_TYPE, METAFN_KIND_BOOL_TINFO_REFLECTION_RANGET,},
-#line 506 "metafns.gperf"
-      {"has_identifier", METAFN_HAS_IDENTIFIER, METAFN_KIND_BOOL_INFO,},
-#line 601 "metafns.gperf"
-      {"has_inaccessible_bases", METAFN_HAS_INACCESSIBLE_BASES, METAFN_KIND_BOOL_INFO_ACCESS_CONTEXT,},
-#line 565 "metafns.gperf"
-      {"is_explicit_object_parameter", METAFN_IS_EXPLICIT_OBJECT_PARAMETER, METAFN_KIND_BOOL_INFO,},
-#line 574 "metafns.gperf"
-      {"is_operator_function_template", METAFN_IS_OPERATOR_FUNCTION_TEMPLATE, METAFN_KIND_BOOL_INFO,},
-#line 716 "metafns.gperf"
-      {"remove_reference", METAFN_REMOVE_REFERENCE, METAFN_KIND_INFO_TINFO,},
-#line 602 "metafns.gperf"
-      {"has_inaccessible_subobjects", METAFN_HAS_INACCESSIBLE_SUBOBJECTS, METAFN_KIND_BOOL_INFO_ACCESS_CONTEXT,},
-#line 707 "metafns.gperf"
-      {"is_invocable_r_type", METAFN_IS_INVOCABLE_R_TYPE, METAFN_KIND_BOOL_TINFO_TINFO_REFLECTION_RANGET,},
-#line 609 "metafns.gperf"
-      {"nonstatic_data_members_of", METAFN_NONSTATIC_DATA_MEMBERS_OF, METAFN_KIND_VECTOR_INFO_INFO_ACCESS_CONTEXT,},
-#line 600 "metafns.gperf"
-      {"has_inaccessible_nonstatic_data_members", METAFN_HAS_INACCESSIBLE_NONSTATIC_DATA_MEMBERS, METAFN_KIND_BOOL_INFO_ACCESS_CONTEXT,},
-#line 608 "metafns.gperf"
-      {"static_data_members_of", METAFN_STATIC_DATA_MEMBERS_OF, METAFN_KIND_VECTOR_INFO_INFO_ACCESS_CONTEXT,},
-#line 721 "metafns.gperf"
-      {"remove_extent", METAFN_REMOVE_EXTENT, METAFN_KIND_INFO_TINFO,},
-#line 758 "metafns.gperf"
-      {"is_conditional_operator", METAFN_IS_CONDITIONAL_OPERATOR, METAFN_KIND_BOOL_INFO,},
-#line 596 "metafns.gperf"
-      {"has_body", METAFN_HAS_BODY, METAFN_KIND_BOOL_INFO,},
-#line 537 "metafns.gperf"
-      {"has_thread_storage_duration", METAFN_HAS_THREAD_STORAGE_DURATION, METAFN_KIND_BOOL_INFO,},
-#line 624 "metafns.gperf"
-      {"data_member_spec", METAFN_DATA_MEMBER_SPEC, METAFN_KIND_INFO_TINFO_DATA_MEMBER_OPTIONS,},
-#line 725 "metafns.gperf"
-      {"remove_cvref", METAFN_REMOVE_CVREF, METAFN_KIND_INFO_TINFO,},
-#line 534 "metafns.gperf"
-      {"is_lvalue_reference_qualified", METAFN_IS_LVALUE_REFERENCE_QUALIFIED, METAFN_KIND_BOOL_INFO,},
-#line 696 "metafns.gperf"
-      {"reference_converts_from_temporary", METAFN_REFERENCE_CONVERTS_FROM_TEMPORARY, METAFN_KIND_BOOL_TINFO_TINFO,},
-#line 620 "metafns.gperf"
-      {"reflect_object", METAFN_REFLECT_OBJECT, METAFN_KIND_INFO_TEMPLATE_PARM_REF,},
-#line 662 "metafns.gperf"
-      {"is_unbounded_array_type", METAFN_IS_UNBOUNDED_ARRAY_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 723 "metafns.gperf"
-      {"remove_pointer", METAFN_REMOVE_POINTER, METAFN_KIND_INFO_TINFO,},
-#line 710 "metafns.gperf"
-      {"remove_const", METAFN_REMOVE_CONST, METAFN_KIND_INFO_TINFO,},
-#line 639 "metafns.gperf"
-      {"is_class_type", METAFN_IS_CLASS_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 747 "metafns.gperf"
-      {"declared_variable_of", METAFN_DECLARED_VARIABLE_OF, METAFN_KIND_INFO_INFO,},
-#line 631 "metafns.gperf"
-      {"is_array_type", METAFN_IS_ARRAY_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 751 "metafns.gperf"
-      {"is_unary_operator", METAFN_IS_UNARY_OPERATOR, METAFN_KIND_BOOL_INFO,},
-#line 722 "metafns.gperf"
-      {"remove_all_extents", METAFN_REMOVE_ALL_EXTENTS, METAFN_KIND_INFO_TINFO,},
-#line 750 "metafns.gperf"
-      {"is_literal", METAFN_IS_LITERAL, METAFN_KIND_BOOL_INFO,},
-#line 626 "metafns.gperf"
-      {"define_aggregate", METAFN_DEFINE_AGGREGATE, METAFN_KIND_INFO_INFO_REFLECTION_RANGE,},
-#line 528 "metafns.gperf"
-      {"is_bit_field", METAFN_IS_BIT_FIELD, METAFN_KIND_BOOL_INFO,},
-#line 655 "metafns.gperf"
-      {"is_abstract_type", METAFN_IS_ABSTRACT_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 695 "metafns.gperf"
-      {"reference_constructs_from_temporary", METAFN_REFERENCE_CONSTRUCTS_FROM_TEMPORARY, METAFN_KIND_BOOL_TINFO_TINFO,},
-#line 647 "metafns.gperf"
-      {"is_compound_type", METAFN_IS_COMPOUND_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 589 "metafns.gperf"
-      {"dealias", METAFN_DEALIAS, METAFN_KIND_INFO_INFO,},
-#line 730 "metafns.gperf"
-      {"invoke_result", METAFN_INVOKE_RESULT, METAFN_KIND_INFO_TINFO_REFLECTION_RANGET,},
-#line 719 "metafns.gperf"
-      {"make_signed", METAFN_MAKE_SIGNED, METAFN_KIND_INFO_TINFO,},
-#line 760 "metafns.gperf"
-      {"true_expression_of", METAFN_TRUE_EXPRESSION_OF, METAFN_KIND_INFO_INFO,},
-#line 732 "metafns.gperf"
-      {"unwrap_ref_decay", METAFN_UNWRAP_REF_DECAY, METAFN_KIND_INFO_TINFO,},
-#line 539 "metafns.gperf"
-      {"has_internal_linkage", METAFN_HAS_INTERNAL_LINKAGE, METAFN_KIND_BOOL_INFO,},
-#line 505 "metafns.gperf"
-      {"u8symbol_of", METAFN_U8SYMBOL_OF, METAFN_KIND_U8STRING_VIEW_OPERATORS,},
-#line 752 "metafns.gperf"
-      {"is_binary_operator", METAFN_IS_BINARY_OPERATOR, METAFN_KIND_BOOL_INFO,},
-#line 739 "metafns.gperf"
-      {"annotations_of_with_type", METAFN_ANNOTATIONS_OF_WITH_TYPE, METAFN_KIND_VECTOR_INFO_INFO_INFO,},
-#line 597 "metafns.gperf"
-      {"body_of", METAFN_BODY_OF, METAFN_KIND_INFO_INFO,},
-#line 511 "metafns.gperf"
-      {"source_location_of", METAFN_SOURCE_LOCATION_OF, METAFN_KIND_SOURCE_LOCATION_INFO,},
-#line 508 "metafns.gperf"
-      {"u8identifier_of", METAFN_U8IDENTIFIER_OF, METAFN_KIND_U8STRING_VIEW_INFO,},
-#line 738 "metafns.gperf"
-      {"annotations_of", METAFN_ANNOTATIONS_OF, METAFN_KIND_VECTOR_INFO_INFO,},
-#line 614 "metafns.gperf"
-      {"alignment_of", METAFN_ALIGNMENT_OF, METAFN_KIND_SIZE_T_INFO,},
-#line 726 "metafns.gperf"
-      {"decay", METAFN_DECAY, METAFN_KIND_INFO_TINFO,},
-#line 763 "metafns.gperf"
-      {"_S_exception_cvt_to_utf8", METAFN_EXCEPTION__S_EXCEPTION_CVT_TO_UTF8, METAFN_KIND_U8STRING_VIEW_INPUT_RANGE,},
-#line 764 "metafns.gperf"
-      {"_S_exception_cvt_from_utf8", METAFN_EXCEPTION__S_EXCEPTION_CVT_FROM_UTF8, METAFN_KIND_STRING_VIEW_INPUT_RANGE,},
-#line 656 "metafns.gperf"
-      {"is_final_type", METAFN_IS_FINAL_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 623 "metafns.gperf"
-      {"reflect_constant_array", METAFN_REFLECT_CONSTANT_ARRAY, METAFN_KIND_INFO_INPUT_RANGE,},
+      {"is_nothrow_convertible_type", METAFN_IS_NOTHROW_CONVERTIBLE_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
+#line 685 "metafns.gperf"
+      {"is_nothrow_constructible_type", METAFN_IS_NOTHROW_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO_REFLECTION_RANGET,},
 #line 711 "metafns.gperf"
-      {"remove_volatile", METAFN_REMOVE_VOLATILE, METAFN_KIND_INFO_TINFO,},
-#line 524 "metafns.gperf"
-      {"is_user_provided", METAFN_IS_USER_PROVIDED, METAFN_KIND_BOOL_INFO,},
-#line 759 "metafns.gperf"
-      {"condition_of", METAFN_CONDITION_OF, METAFN_KIND_INFO_INFO,},
-#line 638 "metafns.gperf"
-      {"is_union_type", METAFN_IS_UNION_TYPE, METAFN_KIND_BOOL_TINFO,},
-#line 629 "metafns.gperf"
-      {"is_integral_type", METAFN_IS_INTEGRAL_TYPE, METAFN_KIND_BOOL_TINFO,},
+      {"is_nothrow_invocable_type", METAFN_IS_NOTHROW_INVOCABLE_TYPE, METAFN_KIND_BOOL_TINFO_REFLECTION_RANGET,},
+#line 690 "metafns.gperf"
+      {"is_nothrow_copy_assignable_type", METAFN_IS_NOTHROW_COPY_ASSIGNABLE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 712 "metafns.gperf"
+      {"is_nothrow_invocable_r_type", METAFN_IS_NOTHROW_INVOCABLE_R_TYPE, METAFN_KIND_BOOL_TINFO_TINFO_REFLECTION_RANGET,},
+#line 687 "metafns.gperf"
+      {"is_nothrow_copy_constructible_type", METAFN_IS_NOTHROW_COPY_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 703 "metafns.gperf"
+      {"is_base_of_type", METAFN_IS_BASE_OF_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
+#line 691 "metafns.gperf"
+      {"is_nothrow_move_assignable_type", METAFN_IS_NOTHROW_MOVE_ASSIGNABLE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 688 "metafns.gperf"
+      {"is_nothrow_move_constructible_type", METAFN_IS_NOTHROW_MOVE_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 573 "metafns.gperf"
+      {"is_variable_template", METAFN_IS_VARIABLE_TEMPLATE, METAFN_KIND_BOOL_INFO,},
+#line 631 "metafns.gperf"
+      {"is_null_pointer_type", METAFN_IS_NULL_POINTER_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 518 "metafns.gperf"
+      {"is_public", METAFN_IS_PUBLIC, METAFN_KIND_BOOL_INFO,},
+#line 530 "metafns.gperf"
+      {"is_noexcept", METAFN_IS_NOEXCEPT, METAFN_KIND_BOOL_INFO,},
+#line 619 "metafns.gperf"
+      {"extract", METAFN_EXTRACT, METAFN_KIND_TEMPLATE_PARM_INFO,},
+#line 739 "metafns.gperf"
+      {"variant_alternative", METAFN_VARIANT_ALTERNATIVE, METAFN_KIND_INFO_SIZE_T_TINFO,},
+#line 657 "metafns.gperf"
+      {"is_polymorphic_type", METAFN_IS_POLYMORPHIC_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 520 "metafns.gperf"
+      {"is_private", METAFN_IS_PRIVATE, METAFN_KIND_BOOL_INFO,},
+#line 554 "metafns.gperf"
+      {"is_function", METAFN_IS_FUNCTION, METAFN_KIND_BOOL_INFO,},
+#line 551 "metafns.gperf"
+      {"is_namespace", METAFN_IS_NAMESPACE, METAFN_KIND_BOOL_INFO,},
+#line 708 "metafns.gperf"
+      {"is_pointer_interconvertible_base_of_type", METAFN_IS_POINTER_INTERCONVERTIBLE_BASE_OF_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
+#line 664 "metafns.gperf"
+      {"is_bounded_array_type", METAFN_IS_BOUNDED_ARRAY_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 534 "metafns.gperf"
+      {"is_const", METAFN_IS_CONST, METAFN_KIND_BOOL_INFO,},
+#line 580 "metafns.gperf"
+      {"is_concept", METAFN_IS_CONCEPT, METAFN_KIND_BOOL_INFO,},
+#line 702 "metafns.gperf"
+      {"is_same_type", METAFN_IS_SAME_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
+#line 610 "metafns.gperf"
+      {"bases_of", METAFN_BASES_OF, METAFN_KIND_VECTOR_INFO_INFO_ACCESS_CONTEXT,},
+#line 762 "metafns.gperf"
+      {"is_cast", METAFN_IS_CAST, METAFN_KIND_BOOL_INFO,},
+#line 572 "metafns.gperf"
+      {"is_function_template", METAFN_IS_FUNCTION_TEMPLATE, METAFN_KIND_BOOL_INFO,},
+#line 689 "metafns.gperf"
+      {"is_nothrow_assignable_type", METAFN_IS_NOTHROW_ASSIGNABLE_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
+#line 555 "metafns.gperf"
+      {"is_conversion_function", METAFN_IS_CONVERSION_FUNCTION, METAFN_KIND_BOOL_INFO,},
+#line 694 "metafns.gperf"
+      {"is_nothrow_destructible_type", METAFN_IS_NOTHROW_DESTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 705 "metafns.gperf"
+      {"is_convertible_type", METAFN_IS_CONVERTIBLE_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
+#line 695 "metafns.gperf"
+      {"is_implicit_lifetime_type", METAFN_IS_IMPLICIT_LIFETIME_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 571 "metafns.gperf"
+      {"is_template", METAFN_IS_TEMPLATE, METAFN_KIND_BOOL_INFO,},
+#line 686 "metafns.gperf"
+      {"is_nothrow_default_constructible_type", METAFN_IS_NOTHROW_DEFAULT_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 620 "metafns.gperf"
+      {"can_substitute", METAFN_CAN_SUBSTITUTE, METAFN_KIND_BOOL_INFO_REFLECTION_RANGE,},
+#line 740 "metafns.gperf"
+      {"type_order", METAFN_TYPE_ORDER, METAFN_KIND_STRONG_ORDERING_TINFO_TINFO,},
+#line 576 "metafns.gperf"
+      {"is_conversion_function_template", METAFN_IS_CONVERSION_FUNCTION_TEMPLATE, METAFN_KIND_BOOL_INFO,},
+#line 507 "metafns.gperf"
+      {"symbol_of", METAFN_SYMBOL_OF, METAFN_KIND_STRING_VIEW_OPERATORS,},
+#line 669 "metafns.gperf"
+      {"is_copy_constructible_type", METAFN_IS_COPY_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 543 "metafns.gperf"
+      {"has_module_linkage", METAFN_HAS_MODULE_LINKAGE, METAFN_KIND_BOOL_INFO,},
+#line 515 "metafns.gperf"
+      {"type_of", METAFN_TYPE_OF, METAFN_KIND_INFO_INFO,},
+#line 667 "metafns.gperf"
+      {"is_constructible_type", METAFN_IS_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO_REFLECTION_RANGET,},
+#line 763 "metafns.gperf"
+      {"is_construct", METAFN_IS_CONSTRUCT, METAFN_KIND_BOOL_INFO,},
+#line 672 "metafns.gperf"
+      {"is_copy_assignable_type", METAFN_IS_COPY_ASSIGNABLE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 590 "metafns.gperf"
+      {"has_parent", METAFN_HAS_PARENT, METAFN_KIND_BOOL_INFO,},
+#line 570 "metafns.gperf"
+      {"is_vararg_function", METAFN_IS_VARARG_FUNCTION, METAFN_KIND_BOOL_INFO,},
+#line 561 "metafns.gperf"
+      {"is_copy_constructor", METAFN_IS_COPY_CONSTRUCTOR, METAFN_KIND_BOOL_INFO,},
+#line 597 "metafns.gperf"
+      {"variable_of", METAFN_VARIABLE_OF, METAFN_KIND_INFO_INFO,},
+#line 644 "metafns.gperf"
+      {"is_reflection_type", METAFN_IS_REFLECTION_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 693 "metafns.gperf"
+      {"is_nothrow_swappable_type", METAFN_IS_NOTHROW_SWAPPABLE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 618 "metafns.gperf"
+      {"bit_size_of", METAFN_BIT_SIZE_OF, METAFN_KIND_SIZE_T_INFO,},
+#line 564 "metafns.gperf"
+      {"is_copy_assignment", METAFN_IS_COPY_ASSIGNMENT, METAFN_KIND_BOOL_INFO,},
+#line 692 "metafns.gperf"
+      {"is_nothrow_swappable_with_type", METAFN_IS_NOTHROW_SWAPPABLE_WITH_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
+#line 768 "metafns.gperf"
+      {"current", METAFN_ACCESS_CONTEXT_CURRENT, METAFN_KIND_ACCESS_CONTEXT_VOID,},
+#line 746 "metafns.gperf"
+      {"expression_of", METAFN_EXPRESSION_OF, METAFN_KIND_INFO_INFO,},
+#line 606 "metafns.gperf"
+      {"current_function", METAFN_CURRENT_FUNCTION, METAFN_KIND_INFO_VOID,},
+#line 616 "metafns.gperf"
+      {"size_of", METAFN_SIZE_OF, METAFN_KIND_SIZE_T_INFO,},
+#line 579 "metafns.gperf"
+      {"is_constructor_template", METAFN_IS_CONSTRUCTOR_TEMPLATE, METAFN_KIND_BOOL_INFO,},
+#line 541 "metafns.gperf"
+      {"has_automatic_storage_duration", METAFN_HAS_AUTOMATIC_STORAGE_DURATION, METAFN_KIND_BOOL_INFO,},
+#line 730 "metafns.gperf"
+      {"common_type", METAFN_COMMON_TYPE, METAFN_KIND_INFO_REFLECTION_RANGET,},
+#line 738 "metafns.gperf"
+      {"variant_size", METAFN_VARIANT_SIZE, METAFN_KIND_SIZE_T_TINFO,},
+#line 596 "metafns.gperf"
+      {"parameters_of", METAFN_PARAMETERS_OF, METAFN_KIND_VECTOR_INFO_INFO,},
+#line 731 "metafns.gperf"
+      {"common_reference", METAFN_COMMON_REFERENCE, METAFN_KIND_INFO_REFLECTION_RANGET,},
+#line 550 "metafns.gperf"
+      {"is_type", METAFN_IS_TYPE, METAFN_KIND_BOOL_INFO,},
+#line 671 "metafns.gperf"
+      {"is_assignable_type", METAFN_IS_ASSIGNABLE_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
+#line 563 "metafns.gperf"
+      {"is_assignment", METAFN_IS_ASSIGNMENT, METAFN_KIND_BOOL_INFO,},
+#line 559 "metafns.gperf"
+      {"is_constructor", METAFN_IS_CONSTRUCTOR, METAFN_KIND_BOOL_INFO,},
+#line 670 "metafns.gperf"
+      {"is_move_constructible_type", METAFN_IS_MOVE_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 727 "metafns.gperf"
+      {"add_pointer", METAFN_ADD_POINTER, METAFN_KIND_INFO_TINFO,},
+#line 645 "metafns.gperf"
+      {"is_reference_type", METAFN_IS_REFERENCE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 589 "metafns.gperf"
+      {"has_default_member_initializer", METAFN_HAS_DEFAULT_MEMBER_INITIALIZER, METAFN_KIND_BOOL_INFO,},
+#line 601 "metafns.gperf"
+      {"statements_of", METAFN_STATEMENTS_OF, METAFN_KIND_VECTOR_INFO_INFO,},
+#line 651 "metafns.gperf"
+      {"is_member_pointer_type", METAFN_IS_MEMBER_POINTER_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 673 "metafns.gperf"
+      {"is_move_assignable_type", METAFN_IS_MOVE_ASSIGNABLE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 569 "metafns.gperf"
+      {"has_default_argument", METAFN_HAS_DEFAULT_ARGUMENT, METAFN_KIND_BOOL_INFO,},
+#line 734 "metafns.gperf"
+      {"unwrap_reference", METAFN_UNWRAP_REFERENCE, METAFN_KIND_INFO_TINFO,},
+#line 562 "metafns.gperf"
+      {"is_move_constructor", METAFN_IS_MOVE_CONSTRUCTOR, METAFN_KIND_BOOL_INFO,},
+#line 558 "metafns.gperf"
+      {"is_special_member_function", METAFN_IS_SPECIAL_MEMBER_FUNCTION, METAFN_KIND_BOOL_INFO,},
+#line 565 "metafns.gperf"
+      {"is_move_assignment", METAFN_IS_MOVE_ASSIGNMENT, METAFN_KIND_BOOL_INFO,},
+#line 732 "metafns.gperf"
+      {"underlying_type", METAFN_UNDERLYING_TYPE, METAFN_KIND_INFO_TINFO,},
+#line 646 "metafns.gperf"
+      {"is_arithmetic_type", METAFN_IS_ARITHMETIC_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 748 "metafns.gperf"
+      {"is_return_statement", METAFN_IS_RETURN_STATEMENT, METAFN_KIND_BOOL_INFO,},
+#line 584 "metafns.gperf"
+      {"is_class_member", METAFN_IS_CLASS_MEMBER, METAFN_KIND_BOOL_INFO,},
+#line 546 "metafns.gperf"
+      {"has_linkage", METAFN_HAS_LINKAGE, METAFN_KIND_BOOL_INFO,},
+#line 519 "metafns.gperf"
+      {"is_protected", METAFN_IS_PROTECTED, METAFN_KIND_BOOL_INFO,},
+#line 510 "metafns.gperf"
+      {"identifier_of", METAFN_IDENTIFIER_OF, METAFN_KIND_STRING_VIEW_INFO,},
+#line 585 "metafns.gperf"
+      {"is_namespace_member", METAFN_IS_NAMESPACE_MEMBER, METAFN_KIND_BOOL_INFO,},
+#line 609 "metafns.gperf"
+      {"members_of", METAFN_MEMBERS_OF, METAFN_KIND_VECTOR_INFO_INFO_ACCESS_CONTEXT,},
+#line 567 "metafns.gperf"
+      {"is_function_parameter", METAFN_IS_FUNCTION_PARAMETER, METAFN_KIND_BOOL_INFO,},
+#line 586 "metafns.gperf"
+      {"is_nonstatic_data_member", METAFN_IS_NONSTATIC_DATA_MEMBER, METAFN_KIND_BOOL_INFO,},
+#line 736 "metafns.gperf"
+      {"tuple_size", METAFN_TUPLE_SIZE, METAFN_KIND_SIZE_T_TINFO,},
+#line 721 "metafns.gperf"
+      {"add_rvalue_reference", METAFN_ADD_RVALUE_REFERENCE, METAFN_KIND_INFO_TINFO,},
+#line 553 "metafns.gperf"
+      {"is_namespace_alias", METAFN_IS_NAMESPACE_ALIAS, METAFN_KIND_BOOL_INFO,},
+#line 647 "metafns.gperf"
+      {"is_fundamental_type", METAFN_IS_FUNDAMENTAL_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 707 "metafns.gperf"
+      {"is_layout_compatible_type", METAFN_IS_LAYOUT_COMPATIBLE_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
+#line 594 "metafns.gperf"
+      {"template_of", METAFN_TEMPLATE_OF, METAFN_KIND_INFO_INFO,},
+#line 743 "metafns.gperf"
+      {"is_statement", METAFN_IS_STATEMENT, METAFN_KIND_BOOL_INFO,},
+#line 552 "metafns.gperf"
+      {"is_type_alias", METAFN_IS_TYPE_ALIAS, METAFN_KIND_BOOL_INFO,},
+#line 668 "metafns.gperf"
+      {"is_default_constructible_type", METAFN_IS_DEFAULT_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 767 "metafns.gperf"
+      {"false_expression_of", METAFN_FALSE_EXPRESSION_OF, METAFN_KIND_INFO_INFO,},
+#line 718 "metafns.gperf"
+      {"add_cv", METAFN_ADD_CV, METAFN_KIND_INFO_TINFO,},
+#line 608 "metafns.gperf"
+      {"current_namespace", METAFN_CURRENT_NAMESPACE, METAFN_KIND_INFO_VOID,},
+#line 649 "metafns.gperf"
+      {"is_scalar_type", METAFN_IS_SCALAR_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 621 "metafns.gperf"
+      {"substitute", METAFN_SUBSTITUTE, METAFN_KIND_INFO_INFO_REFLECTION_RANGE,},
+#line 737 "metafns.gperf"
+      {"tuple_element", METAFN_TUPLE_ELEMENT, METAFN_KIND_INFO_SIZE_T_TINFO,},
+#line 624 "metafns.gperf"
+      {"reflect_function", METAFN_REFLECT_FUNCTION, METAFN_KIND_INFO_TEMPLATE_PARM_REF,},
+#line 675 "metafns.gperf"
+      {"is_swappable_type", METAFN_IS_SWAPPABLE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 744 "metafns.gperf"
+      {"is_compound_statement", METAFN_IS_COMPOUND_STATEMENT, METAFN_KIND_BOOL_INFO,},
+#line 560 "metafns.gperf"
+      {"is_default_constructor", METAFN_IS_DEFAULT_CONSTRUCTOR, METAFN_KIND_BOOL_INFO,},
+#line 661 "metafns.gperf"
+      {"is_structural_type", METAFN_IS_STRUCTURAL_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 716 "metafns.gperf"
+      {"add_const", METAFN_ADD_CONST, METAFN_KIND_INFO_TINFO,},
+#line 583 "metafns.gperf"
+      {"is_structured_binding", METAFN_IS_STRUCTURED_BINDING, METAFN_KIND_BOOL_INFO,},
+#line 566 "metafns.gperf"
+      {"is_destructor", METAFN_IS_DESTRUCTOR, METAFN_KIND_BOOL_INFO,},
+#line 749 "metafns.gperf"
+      {"is_declaration_statement", METAFN_IS_DECLARATION_STATEMENT, METAFN_KIND_BOOL_INFO,},
 #line 660 "metafns.gperf"
+      {"is_aggregate_type", METAFN_IS_AGGREGATE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 602 "metafns.gperf"
+      {"is_accessible", METAFN_IS_ACCESSIBLE, METAFN_KIND_BOOL_INFO_ACCESS_CONTEXT,},
+#line 536 "metafns.gperf"
+      {"is_mutable_member", METAFN_IS_MUTABLE_MEMBER, METAFN_KIND_BOOL_INFO,},
+#line 720 "metafns.gperf"
+      {"add_lvalue_reference", METAFN_ADD_LVALUE_REFERENCE, METAFN_KIND_INFO_TINFO,},
+#line 607 "metafns.gperf"
+      {"current_class", METAFN_CURRENT_CLASS, METAFN_KIND_INFO_VOID,},
+#line 701 "metafns.gperf"
+      {"extent", METAFN_EXTENT, METAFN_KIND_SIZE_T_TINFO_UNSIGNED,},
+#line 640 "metafns.gperf"
+      {"is_enum_type", METAFN_IS_ENUM_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 639 "metafns.gperf"
+      {"is_member_function_pointer_type", METAFN_IS_MEMBER_FUNCTION_POINTER_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 723 "metafns.gperf"
+      {"make_unsigned", METAFN_MAKE_UNSIGNED, METAFN_KIND_INFO_TINFO,},
+#line 654 "metafns.gperf"
+      {"is_trivially_copyable_type", METAFN_IS_TRIVIALLY_COPYABLE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 637 "metafns.gperf"
+      {"is_rvalue_reference_type", METAFN_IS_RVALUE_REFERENCE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 522 "metafns.gperf"
+      {"is_pure_virtual", METAFN_IS_PURE_VIRTUAL, METAFN_KIND_BOOL_INFO,},
+#line 677 "metafns.gperf"
+      {"is_trivially_constructible_type", METAFN_IS_TRIVIALLY_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO_REFLECTION_RANGET,},
+#line 682 "metafns.gperf"
+      {"is_trivially_copy_assignable_type", METAFN_IS_TRIVIALLY_COPY_ASSIGNABLE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 679 "metafns.gperf"
+      {"is_trivially_copy_constructible_type", METAFN_IS_TRIVIALLY_COPY_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 548 "metafns.gperf"
+      {"is_enumerable_type", METAFN_IS_ENUMERABLE_TYPE, METAFN_KIND_BOOL_INFO,},
+#line 513 "metafns.gperf"
+      {"u8display_string_of", METAFN_U8DISPLAY_STRING_OF, METAFN_KIND_U8STRING_VIEW_INFO,},
+#line 591 "metafns.gperf"
+      {"parent_of", METAFN_PARENT_OF, METAFN_KIND_INFO_INFO,},
+#line 614 "metafns.gperf"
+      {"enumerators_of", METAFN_ENUMERATORS_OF, METAFN_KIND_VECTOR_INFO_INFO,},
+#line 759 "metafns.gperf"
+      {"is_function_call", METAFN_IS_FUNCTION_CALL, METAFN_KIND_BOOL_INFO,},
+#line 574 "metafns.gperf"
+      {"is_class_template", METAFN_IS_CLASS_TEMPLATE, METAFN_KIND_BOOL_INFO,},
+#line 595 "metafns.gperf"
+      {"template_arguments_of", METAFN_TEMPLATE_ARGUMENTS_OF, METAFN_KIND_VECTOR_INFO_INFO,},
+#line 666 "metafns.gperf"
+      {"is_scoped_enum_type", METAFN_IS_SCOPED_ENUM_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 598 "metafns.gperf"
+      {"return_type_of", METAFN_RETURN_TYPE_OF, METAFN_KIND_INFO_INFO,},
+#line 517 "metafns.gperf"
+      {"constant_of", METAFN_CONSTANT_OF, METAFN_KIND_INFO_INFO,},
+#line 512 "metafns.gperf"
+      {"display_string_of", METAFN_DISPLAY_STRING_OF, METAFN_KIND_STRING_VIEW_INFO,},
+#line 532 "metafns.gperf"
+      {"is_enumerator", METAFN_IS_ENUMERATOR, METAFN_KIND_BOOL_INFO,},
+#line 582 "metafns.gperf"
+      {"is_object", METAFN_IS_OBJECT, METAFN_KIND_BOOL_INFO,},
+#line 525 "metafns.gperf"
+      {"is_deleted", METAFN_IS_DELETED, METAFN_KIND_BOOL_INFO,},
+#line 625 "metafns.gperf"
+      {"reflect_constant_string", METAFN_REFLECT_CONSTANT_STRING, METAFN_KIND_INFO_INPUT_RANGE,},
+#line 526 "metafns.gperf"
+      {"is_defaulted", METAFN_IS_DEFAULTED, METAFN_KIND_BOOL_INFO,},
+#line 628 "metafns.gperf"
+      {"is_data_member_spec", METAFN_IS_DATA_MEMBER_SPEC, METAFN_KIND_BOOL_INFO,},
+#line 622 "metafns.gperf"
+      {"reflect_constant", METAFN_REFLECT_CONSTANT, METAFN_KIND_INFO_TEMPLATE_PARM,},
+#line 681 "metafns.gperf"
+      {"is_trivially_assignable_type", METAFN_IS_TRIVIALLY_ASSIGNABLE_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
+#line 648 "metafns.gperf"
+      {"is_object_type", METAFN_IS_OBJECT_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 587 "metafns.gperf"
+      {"is_static_member", METAFN_IS_STATIC_MEMBER, METAFN_KIND_BOOL_INFO,},
+#line 627 "metafns.gperf"
+      {"data_member_spec", METAFN_DATA_MEMBER_SPEC, METAFN_KIND_INFO_TINFO_DATA_MEMBER_OPTIONS,},
+#line 683 "metafns.gperf"
+      {"is_trivially_move_assignable_type", METAFN_IS_TRIVIALLY_MOVE_ASSIGNABLE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 680 "metafns.gperf"
+      {"is_trivially_move_constructible_type", METAFN_IS_TRIVIALLY_MOVE_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 575 "metafns.gperf"
+      {"is_alias_template", METAFN_IS_ALIAS_TEMPLATE, METAFN_KIND_BOOL_INFO,},
+#line 704 "metafns.gperf"
+      {"is_virtual_base_of_type", METAFN_IS_VIRTUAL_BASE_OF_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
+#line 676 "metafns.gperf"
+      {"is_destructible_type", METAFN_IS_DESTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 662 "metafns.gperf"
+      {"is_signed_type", METAFN_IS_SIGNED_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 545 "metafns.gperf"
+      {"has_c_language_linkage", METAFN_HAS_C_LANGUAGE_LINKAGE, METAFN_KIND_BOOL_INFO,},
+#line 760 "metafns.gperf"
+      {"declaration_of", METAFN_DECLARATION_OF, METAFN_KIND_INFO_INFO,},
+#line 684 "metafns.gperf"
+      {"is_trivially_destructible_type", METAFN_IS_TRIVIALLY_DESTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 528 "metafns.gperf"
+      {"is_user_declared", METAFN_IS_USER_DECLARED, METAFN_KIND_BOOL_INFO,},
+#line 533 "metafns.gperf"
+      {"is_annotation", METAFN_IS_ANNOTATION, METAFN_KIND_BOOL_INFO,},
+#line 539 "metafns.gperf"
+      {"has_static_storage_duration", METAFN_HAS_STATIC_STORAGE_DURATION, METAFN_KIND_BOOL_INFO,},
+#line 656 "metafns.gperf"
+      {"is_empty_type", METAFN_IS_EMPTY_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 678 "metafns.gperf"
+      {"is_trivially_default_constructible_type", METAFN_IS_TRIVIALLY_DEFAULT_CONSTRUCTIBLE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 544 "metafns.gperf"
+      {"has_external_linkage", METAFN_HAS_EXTERNAL_LINKAGE, METAFN_KIND_BOOL_INFO,},
+#line 506 "metafns.gperf"
+      {"operator_of", METAFN_OPERATOR_OF, METAFN_KIND_OPERATORS_INFO,},
+#line 761 "metafns.gperf"
+      {"operands_of", METAFN_OPERANDS_OF, METAFN_KIND_VECTOR_INFO_INFO,},
+#line 636 "metafns.gperf"
+      {"is_lvalue_reference_type", METAFN_IS_LVALUE_REFERENCE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 653 "metafns.gperf"
+      {"is_volatile_type", METAFN_IS_VOLATILE_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 613 "metafns.gperf"
+      {"subobjects_of", METAFN_SUBOBJECTS_OF, METAFN_KIND_VECTOR_INFO_INFO_ACCESS_CONTEXT,},
+#line 615 "metafns.gperf"
+      {"offset_of", METAFN_OFFSET_OF, METAFN_KIND_MEMBER_OFFSET_INFO,},
+#line 747 "metafns.gperf"
+      {"is_expression", METAFN_IS_EXPRESSION, METAFN_KIND_BOOL_INFO,},
+#line 593 "metafns.gperf"
+      {"has_template_arguments", METAFN_HAS_TEMPLATE_ARGUMENTS, METAFN_KIND_BOOL_INFO,},
+#line 674 "metafns.gperf"
+      {"is_swappable_with_type", METAFN_IS_SWAPPABLE_WITH_TYPE, METAFN_KIND_BOOL_TINFO_TINFO,},
+#line 722 "metafns.gperf"
+      {"make_signed", METAFN_MAKE_SIGNED, METAFN_KIND_INFO_TINFO,},
+#line 538 "metafns.gperf"
+      {"is_rvalue_reference_qualified", METAFN_IS_RVALUE_REFERENCE_QUALIFIED, METAFN_KIND_BOOL_INFO,},
+#line 652 "metafns.gperf"
+      {"is_const_type", METAFN_IS_CONST_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 529 "metafns.gperf"
+      {"is_explicit", METAFN_IS_EXPLICIT, METAFN_KIND_BOOL_INFO,},
+#line 717 "metafns.gperf"
+      {"add_volatile", METAFN_ADD_VOLATILE, METAFN_KIND_INFO_TINFO,},
+#line 766 "metafns.gperf"
+      {"true_expression_of", METAFN_TRUE_EXPRESSION_OF, METAFN_KIND_INFO_INFO,},
+#line 752 "metafns.gperf"
+      {"declarators_of", METAFN_DECLARATORS_OF, METAFN_KIND_VECTOR_INFO_INFO,},
+#line 521 "metafns.gperf"
+      {"is_virtual", METAFN_IS_VIRTUAL, METAFN_KIND_BOOL_INFO,},
+#line 547 "metafns.gperf"
+      {"is_complete_type", METAFN_IS_COMPLETE_TYPE, METAFN_KIND_BOOL_INFO,},
+#line 755 "metafns.gperf"
+      {"return_operand_of", METAFN_RETURN_OPERAND_OF, METAFN_KIND_INFO_INFO,},
+#line 516 "metafns.gperf"
+      {"object_of", METAFN_OBJECT_OF, METAFN_KIND_INFO_INFO,},
+#line 745 "metafns.gperf"
+      {"is_expression_statement", METAFN_IS_EXPRESSION_STATEMENT, METAFN_KIND_BOOL_INFO,},
+#line 643 "metafns.gperf"
+      {"is_function_type", METAFN_IS_FUNCTION_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 633 "metafns.gperf"
+      {"is_floating_point_type", METAFN_IS_FLOATING_POINT_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 655 "metafns.gperf"
+      {"is_standard_layout_type", METAFN_IS_STANDARD_LAYOUT_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 638 "metafns.gperf"
+      {"is_member_object_pointer_type", METAFN_IS_MEMBER_OBJECT_POINTER_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 697 "metafns.gperf"
+      {"has_unique_object_representations", METAFN_HAS_UNIQUE_OBJECT_REPRESENTATIONS, METAFN_KIND_BOOL_TINFO,},
+#line 753 "metafns.gperf"
+      {"initializer_of", METAFN_INITIALIZER_OF, METAFN_KIND_INFO_INFO,},
+#line 556 "metafns.gperf"
+      {"is_operator_function", METAFN_IS_OPERATOR_FUNCTION, METAFN_KIND_BOOL_INFO,},
+#line 709 "metafns.gperf"
+      {"is_invocable_type", METAFN_IS_INVOCABLE_TYPE, METAFN_KIND_BOOL_TINFO_REFLECTION_RANGET,},
+#line 578 "metafns.gperf"
+      {"is_literal_operator_template", METAFN_IS_LITERAL_OPERATOR_TEMPLATE, METAFN_KIND_BOOL_INFO,},
+#line 600 "metafns.gperf"
+      {"body_of", METAFN_BODY_OF, METAFN_KIND_INFO_INFO,},
+#line 568 "metafns.gperf"
+      {"is_explicit_object_parameter", METAFN_IS_EXPLICIT_OBJECT_PARAMETER, METAFN_KIND_BOOL_INFO,},
+#line 577 "metafns.gperf"
+      {"is_operator_function_template", METAFN_IS_OPERATOR_FUNCTION_TEMPLATE, METAFN_KIND_BOOL_INFO,},
+#line 523 "metafns.gperf"
+      {"is_override", METAFN_IS_OVERRIDE, METAFN_KIND_BOOL_INFO,},
+#line 696 "metafns.gperf"
+      {"has_virtual_destructor", METAFN_HAS_VIRTUAL_DESTRUCTOR, METAFN_KIND_BOOL_TINFO,},
+#line 710 "metafns.gperf"
+      {"is_invocable_r_type", METAFN_IS_INVOCABLE_R_TYPE, METAFN_KIND_BOOL_TINFO_TINFO_REFLECTION_RANGET,},
+#line 715 "metafns.gperf"
+      {"remove_cv", METAFN_REMOVE_CV, METAFN_KIND_INFO_TINFO,},
+#line 612 "metafns.gperf"
+      {"nonstatic_data_members_of", METAFN_NONSTATIC_DATA_MEMBERS_OF, METAFN_KIND_VECTOR_INFO_INFO_ACCESS_CONTEXT,},
+#line 524 "metafns.gperf"
+      {"is_final", METAFN_IS_FINAL, METAFN_KIND_BOOL_INFO,},
+#line 557 "metafns.gperf"
+      {"is_literal_operator", METAFN_IS_LITERAL_OPERATOR, METAFN_KIND_BOOL_INFO,},
+#line 719 "metafns.gperf"
+      {"remove_reference", METAFN_REMOVE_REFERENCE, METAFN_KIND_INFO_TINFO,},
+#line 509 "metafns.gperf"
+      {"has_identifier", METAFN_HAS_IDENTIFIER, METAFN_KIND_BOOL_INFO,},
+#line 604 "metafns.gperf"
+      {"has_inaccessible_bases", METAFN_HAS_INACCESSIBLE_BASES, METAFN_KIND_BOOL_INFO_ACCESS_CONTEXT,},
+#line 764 "metafns.gperf"
+      {"is_conditional_operator", METAFN_IS_CONDITIONAL_OPERATOR, METAFN_KIND_BOOL_INFO,},
+#line 605 "metafns.gperf"
+      {"has_inaccessible_subobjects", METAFN_HAS_INACCESSIBLE_SUBOBJECTS, METAFN_KIND_BOOL_INFO_ACCESS_CONTEXT,},
+#line 599 "metafns.gperf"
+      {"has_body", METAFN_HAS_BODY, METAFN_KIND_BOOL_INFO,},
+#line 540 "metafns.gperf"
+      {"has_thread_storage_duration", METAFN_HAS_THREAD_STORAGE_DURATION, METAFN_KIND_BOOL_INFO,},
+#line 724 "metafns.gperf"
+      {"remove_extent", METAFN_REMOVE_EXTENT, METAFN_KIND_INFO_TINFO,},
+#line 603 "metafns.gperf"
+      {"has_inaccessible_nonstatic_data_members", METAFN_HAS_INACCESSIBLE_NONSTATIC_DATA_MEMBERS, METAFN_KIND_BOOL_INFO_ACCESS_CONTEXT,},
+#line 611 "metafns.gperf"
+      {"static_data_members_of", METAFN_STATIC_DATA_MEMBERS_OF, METAFN_KIND_VECTOR_INFO_INFO_ACCESS_CONTEXT,},
+#line 699 "metafns.gperf"
+      {"reference_converts_from_temporary", METAFN_REFERENCE_CONVERTS_FROM_TEMPORARY, METAFN_KIND_BOOL_TINFO_TINFO,},
+#line 665 "metafns.gperf"
+      {"is_unbounded_array_type", METAFN_IS_UNBOUNDED_ARRAY_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 728 "metafns.gperf"
+      {"remove_cvref", METAFN_REMOVE_CVREF, METAFN_KIND_INFO_TINFO,},
+#line 642 "metafns.gperf"
+      {"is_class_type", METAFN_IS_CLASS_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 537 "metafns.gperf"
+      {"is_lvalue_reference_qualified", METAFN_IS_LVALUE_REFERENCE_QUALIFIED, METAFN_KIND_BOOL_INFO,},
+#line 751 "metafns.gperf"
+      {"declared_variable_of", METAFN_DECLARED_VARIABLE_OF, METAFN_KIND_INFO_INFO,},
+#line 634 "metafns.gperf"
+      {"is_array_type", METAFN_IS_ARRAY_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 757 "metafns.gperf"
+      {"is_unary_operator", METAFN_IS_UNARY_OPERATOR, METAFN_KIND_BOOL_INFO,},
+#line 726 "metafns.gperf"
+      {"remove_pointer", METAFN_REMOVE_POINTER, METAFN_KIND_INFO_TINFO,},
+#line 629 "metafns.gperf"
+      {"define_aggregate", METAFN_DEFINE_AGGREGATE, METAFN_KIND_INFO_INFO_REFLECTION_RANGE,},
+#line 623 "metafns.gperf"
+      {"reflect_object", METAFN_REFLECT_OBJECT, METAFN_KIND_INFO_TEMPLATE_PARM_REF,},
+#line 713 "metafns.gperf"
+      {"remove_const", METAFN_REMOVE_CONST, METAFN_KIND_INFO_TINFO,},
+#line 658 "metafns.gperf"
+      {"is_abstract_type", METAFN_IS_ABSTRACT_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 725 "metafns.gperf"
+      {"remove_all_extents", METAFN_REMOVE_ALL_EXTENTS, METAFN_KIND_INFO_TINFO,},
+#line 698 "metafns.gperf"
+      {"reference_constructs_from_temporary", METAFN_REFERENCE_CONSTRUCTS_FROM_TEMPORARY, METAFN_KIND_BOOL_TINFO_TINFO,},
+#line 650 "metafns.gperf"
+      {"is_compound_type", METAFN_IS_COMPOUND_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 733 "metafns.gperf"
+      {"invoke_result", METAFN_INVOKE_RESULT, METAFN_KIND_INFO_TINFO_REFLECTION_RANGET,},
+#line 756 "metafns.gperf"
+      {"is_literal", METAFN_IS_LITERAL, METAFN_KIND_BOOL_INFO,},
+#line 531 "metafns.gperf"
+      {"is_bit_field", METAFN_IS_BIT_FIELD, METAFN_KIND_BOOL_INFO,},
+#line 735 "metafns.gperf"
+      {"unwrap_ref_decay", METAFN_UNWRAP_REF_DECAY, METAFN_KIND_INFO_TINFO,},
+#line 592 "metafns.gperf"
+      {"dealias", METAFN_DEALIAS, METAFN_KIND_INFO_INFO,},
+#line 508 "metafns.gperf"
+      {"u8symbol_of", METAFN_U8SYMBOL_OF, METAFN_KIND_U8STRING_VIEW_OPERATORS,},
+#line 742 "metafns.gperf"
+      {"annotations_of_with_type", METAFN_ANNOTATIONS_OF_WITH_TYPE, METAFN_KIND_VECTOR_INFO_INFO_INFO,},
+#line 542 "metafns.gperf"
+      {"has_internal_linkage", METAFN_HAS_INTERNAL_LINKAGE, METAFN_KIND_BOOL_INFO,},
+#line 514 "metafns.gperf"
+      {"source_location_of", METAFN_SOURCE_LOCATION_OF, METAFN_KIND_SOURCE_LOCATION_INFO,},
+#line 750 "metafns.gperf"
+      {"is_simple_declaration", METAFN_IS_SIMPLE_DECLARATION, METAFN_KIND_BOOL_INFO,},
+#line 758 "metafns.gperf"
+      {"is_binary_operator", METAFN_IS_BINARY_OPERATOR, METAFN_KIND_BOOL_INFO,},
+#line 511 "metafns.gperf"
+      {"u8identifier_of", METAFN_U8IDENTIFIER_OF, METAFN_KIND_U8STRING_VIEW_INFO,},
+#line 741 "metafns.gperf"
+      {"annotations_of", METAFN_ANNOTATIONS_OF, METAFN_KIND_VECTOR_INFO_INFO,},
+#line 754 "metafns.gperf"
+      {"initializers_of", METAFN_INITIALIZERS_OF, METAFN_KIND_VECTOR_INFO_INFO,},
+#line 617 "metafns.gperf"
+      {"alignment_of", METAFN_ALIGNMENT_OF, METAFN_KIND_SIZE_T_INFO,},
+#line 769 "metafns.gperf"
+      {"_S_exception_cvt_to_utf8", METAFN_EXCEPTION__S_EXCEPTION_CVT_TO_UTF8, METAFN_KIND_U8STRING_VIEW_INPUT_RANGE,},
+#line 770 "metafns.gperf"
+      {"_S_exception_cvt_from_utf8", METAFN_EXCEPTION__S_EXCEPTION_CVT_FROM_UTF8, METAFN_KIND_STRING_VIEW_INPUT_RANGE,},
+#line 626 "metafns.gperf"
+      {"reflect_constant_array", METAFN_REFLECT_CONSTANT_ARRAY, METAFN_KIND_INFO_INPUT_RANGE,},
+#line 527 "metafns.gperf"
+      {"is_user_provided", METAFN_IS_USER_PROVIDED, METAFN_KIND_BOOL_INFO,},
+#line 729 "metafns.gperf"
+      {"decay", METAFN_DECAY, METAFN_KIND_INFO_TINFO,},
+#line 659 "metafns.gperf"
+      {"is_final_type", METAFN_IS_FINAL_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 714 "metafns.gperf"
+      {"remove_volatile", METAFN_REMOVE_VOLATILE, METAFN_KIND_INFO_TINFO,},
+#line 765 "metafns.gperf"
+      {"condition_of", METAFN_CONDITION_OF, METAFN_KIND_INFO_INFO,},
+#line 641 "metafns.gperf"
+      {"is_union_type", METAFN_IS_UNION_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 632 "metafns.gperf"
+      {"is_integral_type", METAFN_IS_INTEGRAL_TYPE, METAFN_KIND_BOOL_TINFO,},
+#line 663 "metafns.gperf"
       {"is_unsigned_type", METAFN_IS_UNSIGNED_TYPE, METAFN_KIND_BOOL_TINFO,}
     };
 #if (defined __GNUC__ && __GNUC__ + (__GNUC_MINOR__ >= 6) > 4) || (defined __clang__ && __clang_major__ >= 3)
@@ -1184,104 +1193,102 @@ metafn_lookup::find (const char *str, size_t len)
         27,   -1,   28,   -1,   29,   -1,   30,   31,
         -1,   -1,   -1,   32,   -1,   -1,   33,   34,
         35,   36,   37,   38,   -1,   -1,   -1,   -1,
-        -1,   39,   40,   -1,   41,   -1,   42,   -1,
-        -1,   43,   -1,   44,   -1,   45,   -1,   -1,
-        -1,   46,   -1,   -1,   -1,   -1,   47,   -1,
+        -1,   39,   40,   -1,   41,   42,   43,   -1,
+        -1,   44,   -1,   45,   -1,   46,   -1,   -1,
+        -1,   -1,   -1,   -1,   -1,   -1,   47,   -1,
         -1,   -1,   48,   49,   50,   -1,   51,   -1,
         -1,   52,   53,   -1,   54,   -1,   55,   -1,
         56,   57,   -1,   58,   -1,   59,   -1,   60,
-        61,   -1,   -1,   62,   -1,   63,   -1,   64,
-        65,   -1,   66,   -1,   -1,   67,   -1,   -1,
-        -1,   -1,   -1,   -1,   68,   -1,   -1,   -1,
-        -1,   69,   70,   -1,   71,   -1,   -1,   -1,
-        -1,   72,   73,   -1,   -1,   74,   -1,   -1,
-        75,   -1,   -1,   -1,   76,   77,   -1,   78,
-        79,   -1,   80,   81,   -1,   -1,   -1,   -1,
-        -1,   -1,   82,   -1,   83,   -1,   84,   -1,
-        -1,   85,   86,   87,   88,   89,   90,   91,
-        92,   93,   -1,   -1,   94,   95,   -1,   -1,
-        -1,   -1,   96,   -1,   -1,   97,   98,   99,
-       100,  101,   -1,  102,   -1,   -1,   -1,   -1,
-       103,   -1,  104,  105,   -1,  106,  107,   -1,
-        -1,  108,   -1,   -1,  109,  110,   -1,   -1,
-        -1,  111,  112,  113,   -1,   -1,   -1,   -1,
-        -1,  114,  115,  116,   -1,  117,  118,   -1,
-        -1,  119,  120,   -1,   -1,   -1,  121,   -1,
-        -1,  122,   -1,  123,  124,  125,   -1,   -1,
+        61,   -1,   -1,   62,   63,   64,   -1,   65,
+        66,   67,   68,   -1,   -1,   69,   70,   -1,
+        -1,   -1,   -1,   -1,   71,   -1,   -1,   -1,
+        -1,   72,   73,   -1,   74,   -1,   -1,   -1,
+        -1,   75,   76,   -1,   -1,   77,   -1,   -1,
+        78,   -1,   -1,   -1,   79,   80,   -1,   81,
+        82,   -1,   -1,   83,   -1,   -1,   -1,   -1,
+        -1,   -1,   84,   -1,   85,   -1,   86,   -1,
+        -1,   87,   88,   89,   90,   91,   92,   93,
+        94,   95,   -1,   -1,   96,   97,   -1,   -1,
+        -1,   -1,   98,   -1,   -1,   99,  100,  101,
+       102,  103,  104,  105,   -1,   -1,   -1,   -1,
+       106,   -1,  107,  108,   -1,  109,  110,   -1,
+        -1,  111,   -1,   -1,  112,  113,   -1,   -1,
+        -1,  114,  115,  116,   -1,   -1,   -1,   -1,
+        -1,  117,   -1,  118,   -1,  119,  120,   -1,
+        -1,  121,  122,   -1,   -1,   -1,  123,   -1,
+        -1,  124,   -1,   -1,  125,   -1,   -1,   -1,
         -1,   -1,   -1,   -1,  126,  127,   -1,   -1,
-        -1,  128,   -1,   -1,   -1,   -1,  129,   -1,
-        -1,   -1,  130,  131,   -1,  132,   -1,   -1,
-       133,  134,  135,  136,   -1,   -1,   -1,   -1,
-       137,   -1,   -1,   -1,   -1,  138,   -1,  139,
-       140,   -1,   -1,   -1,  141,   -1,   -1,  142,
-        -1,   -1,   -1,   -1,  143,   -1,  144,   -1,
-        -1,   -1,   -1,   -1,  145,  146,  147,  148,
-        -1,   -1,  149,   -1,   -1,   -1,  150,  151,
+        -1,  128,   -1,  129,   -1,   -1,  130,   -1,
+        -1,  131,  132,  133,   -1,  134,   -1,   -1,
+       135,   -1,  136,  137,   -1,   -1,   -1,   -1,
+       138,   -1,   -1,   -1,   -1,  139,   -1,  140,
+       141,   -1,   -1,   -1,  142,   -1,   -1,  143,
+        -1,   -1,   -1,   -1,  144,   -1,  145,   -1,
+        -1,   -1,   -1,   -1,  146,  147,  148,  149,
+        -1,   -1,  150,   -1,   -1,   -1,  151,   -1,
        152,   -1,  153,   -1,  154,  155,   -1,  156,
-        -1,   -1,  157,   -1,   -1,   -1,  158,   -1,
+        -1,   -1,   -1,   -1,  157,   -1,  158,   -1,
         -1,  159,   -1,   -1,   -1,   -1,   -1,   -1,
-        -1,   -1,   -1,   -1,  160,   -1,   -1,   -1,
-        -1,   -1,   -1,   -1,  161,   -1,   -1,   -1,
-       162,   -1,   -1,  163,   -1,  164,  165,  166,
-        -1,  167,   -1,   -1,   -1,  168,  169,  170,
-       171, -706,  174,  -90,   -2,   -1,  175,   -1,
-       176,  177,   -1,   -1,   -1,  178,  179,  180,
-        -1,  181,   -1,   -1,   -1,   -1,  182,   -1,
+        -1,   -1,   -1,   -1,  160,  161,   -1,   -1,
+        -1,   -1,   -1,   -1,  162,   -1,   -1,   -1,
+       163,   -1,   -1,  164,   -1,  165,  166,  167,
+        -1,  168,   -1,   -1,   -1,  169,  170,  171,
+       172, -708,  -92,   -2,  175,   -1,  176,   -1,
+       177,  178,   -1,   -1,   -1,  179,   -1,   -1,
+        -1,  180,   -1,   -1,   -1,   -1,  181,   -1,
+        -1,   -1,  182,   -1,   -1,   -1,   -1,   -1,
+        -1,   -1,  183,   -1,   -1,   -1,  184,   -1,
+        -1,  185,  186,  187,  188,  189,  190,  191,
+        -1,  192,   -1,   -1,   -1,  193,   -1,   -1,
+       194,  195,  196,  197,   -1,   -1,   -1,  198,
+       199,  200,   -1,   -1,   -1,   -1,   -1,   -1,
+       201,  202,   -1,   -1,   -1,  203,  204,  205,
+        -1,  206,  207,   -1,  208,   -1,   -1,   -1,
+        -1,  209,  210,   -1,   -1,  211,  212,   -1,
+        -1,   -1,   -1,   -1,   -1,  213,   -1,   -1,
+       214,   -1,   -1,  215,  216,   -1,   -1,   -1,
+       217,  218,   -1,   -1,   -1,  219,  220,   -1,
+        -1,   -1,   -1,   -1,  221,   -1,   -1,  222,
+        -1,   -1,   -1,   -1,   -1,  223,   -1,   -1,
+        -1,   -1,  224,   -1,   -1,   -1,   -1,   -1,
+        -1,   -1,   -1,  225,  226,  227,  228,   -1,
+        -1,  229,   -1,   -1,   -1,  230,   -1,  231,
+        -1,  232,   -1,   -1,  233,   -1,   -1,  234,
+        -1,   -1,   -1,  235,   -1,   -1,   -1,   -1,
+        -1,   -1,  236,   -1,   -1,   -1,   -1,   -1,
+        -1,  237,  238,   -1,  239,   -1,  240,   -1,
+        -1,   -1,   -1,   -1,   -1,  241,   -1,   -1,
         -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
-        -1,  183,  184,   -1,   -1,   -1,  185,   -1,
-        -1,  186,   -1,  187,   -1,   -1,  188,  189,
-       190,  191,   -1,   -1,   -1,  192,   -1,   -1,
-       193,  194,  195,  196,   -1,  197,  198,  199,
-       200,  201,   -1,   -1,   -1,  202,   -1,   -1,
-       203,   -1,  204,   -1,   -1,  205,  206,  207,
-        -1,  208,  209,   -1,  210,   -1,   -1,   -1,
-        -1,   -1,  211,   -1,   -1,   -1,  212,   -1,
-        -1,  213,  214,   -1,   -1,   -1,   -1,   -1,
-        -1,   -1,   -1,   -1,  215,   -1,   -1,   -1,
-        -1,  216,   -1,   -1,   -1,  217,   -1,   -1,
-        -1,  218,   -1,   -1,   -1,   -1,   -1,  219,
-        -1,  220,   -1,   -1,   -1,  221,  222,   -1,
-        -1,   -1,  223,  224,   -1,   -1,   -1,   -1,
-        -1,   -1,   -1,  225,  226,   -1,  227,   -1,
-        -1,  228,   -1,   -1,   -1,  229,  230,   -1,
-       231,  232,   -1,   -1,   -1,   -1,   -1,  233,
-        -1,   -1,   -1,  234,   -1,   -1,   -1,   -1,
-        -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
-        -1,  235,  236,  237,  238,   -1,   -1,  239,
-        -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
-        -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
-       240,   -1,   -1,  241,   -1,   -1,   -1,  242,
-        -1,   -1,   -1,   -1,   -1,  243,   -1,  244,
+        -1,   -1,   -1,  242,   -1,   -1,   -1,   -1,
+        -1,  243,   -1,   -1,   -1,  244,   -1,   -1,
        245,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
         -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
-        -1,   -1,  246,   -1,   -1,   -1,   -1,   -1,
-       247,   -1,   -1,   -1,   -1,   -1,   -1,  248,
+        -1,   -1,   -1,   -1,   -1,  246,   -1,   -1,
+       247,   -1,   -1,  248,   -1,  249,   -1,  250,
         -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
-       249,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
+       251,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
         -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
+        -1,   -1,   -1,   -1,   -1,  252,   -1,   -1,
+        -1,   -1,   -1,   -1,  253,   -1,   -1,   -1,
         -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
-        -1,   -1,   -1,   -1,  250,   -1,   -1,  251,
+        -1,   -1,   -1,   -1,   -1,  254,   -1,  255,
         -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
-        -1,   -1,   -1,   -1,   -1,  252,   -1,  253,
-        -1,   -1,   -1,   -1,   -1,   -1,  254,   -1,
-        -1,   -1,  255,   -1,   -1,   -1,   -1,   -1,
-        -1,   -1,  256,  257,   -1,   -1,   -1,   -1,
+        -1,   -1,  256,   -1,   -1,   -1,   -1,   -1,
+        -1,   -1,   -1,  257,   -1,   -1,   -1,  258,
         -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
-        -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
-        -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
-        -1,   -1,  258,   -1,   -1,   -1,   -1,   -1,
+        -1,   -1,   -1,   -1,  259,   -1,  260,   -1,
         -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
         -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
         -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
         -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
         -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
-        -1,   -1,   -1,   -1,   -1,  259,   -1,   -1,
+       261,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
+        -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
+        -1,   -1,   -1,   -1,   -1,  262,   -1,   -1,
         -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
         -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
         -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
-        -1,  260,   -1,   -1,   -1,   -1,   -1,   -1,
-        -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
-        -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
+        -1,  263,   -1,   -1,   -1,   -1,   -1,   -1,
         -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
         -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
         -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
@@ -1294,7 +1301,9 @@ metafn_lookup::find (const char *str, size_t len)
         -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
         -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
         -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
-        -1,  261
+        -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
+        -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
+        -1,  264
     };
 
   if (len <= MAX_WORD_LENGTH && len >= MIN_WORD_LENGTH)
