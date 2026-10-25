@@ -333,6 +333,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     consteval bool is_prefix(info);
     consteval bool is_postfix(info);
     consteval bool is_function_call(info);
+    consteval info callee_of(info);
     consteval info declaration_of(info);
     consteval vector<info> operands_of(info);
     consteval bool is_variable_reference(info __i) { return is_variable(__i); }
@@ -347,7 +348,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     consteval info true_expression_of(info);
     consteval info false_expression_of(info);
     consteval operators expression_operator_of(info __i) { return operator_of(__i); }
-    consteval info callee_of(info __i) { return operands_of(__i)[0]; }
 
     template<typename _Container>
     consteval auto define_static_array(_Container&& __c) {

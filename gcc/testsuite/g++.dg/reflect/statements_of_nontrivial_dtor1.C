@@ -53,4 +53,4 @@ static_assert (statements_of (body_of (^^d_local_then_return)).size ()
 static_assert (returns_call_to (^^t_return_call, ^^make_t));
 static_assert (returns_call_to (^^d_return_call, ^^make_d));
 static_assert (operands_of (return_operand_of (return_of (^^d_return_call)))
-	       .size () == 2);
+	       .size () == 1);

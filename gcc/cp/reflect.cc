@@ -4349,9 +4349,26 @@ eval_false_expression_of (location_t loc, const constexpr_ctx *ctx, tree r,
 }
 
 static tree
-eval_is_unary_operator (tree r)
+unwrap_call_expr (tree r)
 {
   if (!r)
+    return NULL_TREE;
+  r = strip_return_slot_temporary (r);
+  if (r && REFERENCE_REF_P (r))
+    {
+      tree inner = strip_return_slot_temporary (TREE_OPERAND (r, 0));
+      if (inner && (TREE_CODE (inner) == CALL_EXPR || aggr_init_call_p (inner)))
+	r = inner;
+    }
+  if (r && (TREE_CODE (r) == CALL_EXPR || aggr_init_call_p (r)))
+    return r;
+  return NULL_TREE;
+}
+
+static tree
+eval_is_unary_operator (tree r)
+{
+  if (!r || unwrap_call_expr (r))
     return boolean_false_node;
   tree_code code = TREE_CODE (r);
   if (code < MAX_TREE_CODES
@@ -4437,11 +4454,26 @@ eval_is_postfix (tree r)
 static tree
 eval_is_function_call (tree r)
 {
-  if (!r)
-    return boolean_false_node;
-  if (TREE_CODE (r) == CALL_EXPR || aggr_init_call_p (r))
-    return boolean_true_node;
-  return boolean_false_node;
+  return unwrap_call_expr (r) ? boolean_true_node : boolean_false_node;
+}
+
+static tree
+eval_callee_of (location_t loc, const constexpr_ctx *ctx, tree r,
+		bool *non_constant_p, tree *jump_target, tree fun)
+{
+  tree call = unwrap_call_expr (r);
+  if (!call)
+    return throw_exception (loc, ctx,
+			    "reflection does not represent a function call",
+			    fun, non_constant_p, jump_target);
+  tree fn = (TREE_CODE (call) == CALL_EXPR)
+	    ? CALL_EXPR_FN (call)
+	    : AGGR_INIT_EXPR_FN (call);
+  if (!fn)
+    return get_null_reflection ();
+  if (TREE_CODE (fn) == ADDR_EXPR)
+    fn = TREE_OPERAND (fn, 0);
+  return get_reflection_raw (loc, fn, REFLECT_UNDEF);
 }
 
 static tree
@@ -4475,45 +4507,60 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
 			    fun, non_constant_p, jump_target);
 
   vec<constructor_elt, va_gc> *elts = nullptr;
+  bool is_postfix_op = (eval_is_postfix (r) == boolean_true_node);
+
+  if (tree call = unwrap_call_expr (r))
+    {
+      if (TREE_CODE (call) == CALL_EXPR)
+	{
+	  call_expr_arg_iterator ai;
+	  for (tree arg = first_call_expr_arg (call, &ai); arg;
+	       arg = next_call_expr_arg (&ai))
+	    {
+	      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+				      get_reflection_raw (loc, arg, REFLECT_UNDEF));
+	      if (is_postfix_op)
+		break;
+	    }
+	}
+      else
+	{
+	  aggr_init_expr_arg_iterator ai;
+	  for (tree arg = first_aggr_init_expr_arg (call, &ai); arg;
+	       arg = next_aggr_init_expr_arg (&ai))
+	    {
+	      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+				      get_reflection_raw (loc, arg, REFLECT_UNDEF));
+	      if (is_postfix_op)
+		break;
+	    }
+	}
+      return get_vector_of_info_elts (elts);
+    }
+
+  if (TREE_CODE (r) == TARGET_EXPR && TARGET_EXPR_INITIAL (r))
+    r = TARGET_EXPR_INITIAL (r);
 
   tree_code code = TREE_CODE (r);
-  if (CONSTANT_CLASS_P (r) || code == VAR_DECL || code == PARM_DECL || code == CONST_DECL || code == RESULT_DECL)
+  if (CONSTANT_CLASS_P (r) || DECL_P (r))
+    return get_vector_of_info_elts (nullptr);
+  else if (code == AGGR_INIT_EXPR && AGGR_INIT_VIA_CTOR_P (r))
     {
-      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-			      get_reflection_raw (loc, r, REFLECT_UNDEF));
-    }
-  else if (code == CALL_EXPR)
-    {
-      // Append callee
-      if (CALL_EXPR_FN (r))
-	{
-	  tree fn = CALL_EXPR_FN (r);
-	  if (TREE_CODE (fn) == ADDR_EXPR)
-	    fn = TREE_OPERAND (fn, 0);
-	  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-				  get_reflection_raw (loc, fn, REFLECT_UNDEF));
-	}
-      // Append arguments
-      call_expr_arg_iterator ai;
-      for (tree arg = first_call_expr_arg (r, &ai); arg; arg = next_call_expr_arg (&ai))
-	if (arg)
+      /* Skip the artificial `this` pointer argument of the constructor.  */
+      int nargs = aggr_init_expr_nargs (r);
+      for (int i = 1; i < nargs; ++i)
+	if (tree arg = AGGR_INIT_EXPR_ARG (r, i))
 	  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
 				  get_reflection_raw (loc, arg, REFLECT_UNDEF));
     }
-  else if (aggr_init_call_p (r))
+  else if (code == CONSTRUCTOR)
     {
-      // The same as a CALL_EXPR: the callee, then the arguments.  The slot
-      // the call initializes isn't an operand in the source.
-      tree fn = AGGR_INIT_EXPR_FN (r);
-      if (TREE_CODE (fn) == ADDR_EXPR)
-	fn = TREE_OPERAND (fn, 0);
-      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-			      get_reflection_raw (loc, fn, REFLECT_UNDEF));
-      aggr_init_expr_arg_iterator ai;
-      for (tree arg = first_aggr_init_expr_arg (r, &ai); arg;
-	   arg = next_aggr_init_expr_arg (&ai))
-	CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-				get_reflection_raw (loc, arg, REFLECT_UNDEF));
+      unsigned ix;
+      tree val;
+      FOR_EACH_CONSTRUCTOR_VALUE (CONSTRUCTOR_ELTS (r), ix, val)
+	if (val)
+	  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+				  get_reflection_raw (loc, val, REFLECT_UNDEF));
     }
   else
     {
@@ -9679,6 +9726,8 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
       return eval_is_postfix (h);
     case METAFN_IS_FUNCTION_CALL:
       return eval_is_function_call (h);
+    case METAFN_CALLEE_OF:
+      return eval_callee_of (loc, ctx, h, non_constant_p, jump_target, fun);
     case METAFN_DECLARATION_OF:
       return eval_declaration_of (loc, ctx, h, non_constant_p, jump_target, fun);
     case METAFN_OPERANDS_OF:
