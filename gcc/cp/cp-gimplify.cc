@@ -3902,6 +3902,17 @@ cp_fold (tree x, fold_flags_t flags)
 	r = fold (x);
 	optimize = sv;
 
+	/* With -freflection, keep a call to a built-in function that would
+	   fold to an expression other than a constant, so that the reflection
+	   of the function body shows the call in the source: std::fabs (x)
+	   would otherwise be an ABS_EXPR.  The middle end folds it later.  */
+	if (flag_reflection
+	    && TREE_CODE (r) != CALL_EXPR
+	    && !CONSTANT_CLASS_P (r)
+	    && callee
+	    && fndecl_built_in_p (callee, BUILT_IN_NORMAL))
+	  r = x;
+
 	if (TREE_CODE (r) != CALL_EXPR)
 	  {
 	    x = cp_fold (r, flags);
