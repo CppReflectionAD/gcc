@@ -3371,6 +3371,75 @@ added_statement_p (tree stmt)
   return false;
 }
 
+/* When the initializer of a variable isn't constant, store_init_value has
+   split_nonconstant_init initialize the variable's subobjects one by one, in
+   a statement after its declaration, and leaves the variable with no
+   initializer, or with only the parts that are constant: `T b = {x};`
+   declares b without an initializer and then does `b.v = x;`.  Under
+   -freflection, keep the initializer as written, for initializer_of, which
+   also lets statements_of leave out the split initialization as part of the
+   declaration.  */
+
+static GTY(()) decl_tree_map *split_initializers;
+
+/* split_nonconstant_init (DEST, INIT) for store_init_value under
+   -freflection.  */
+
+tree
+reflection_split_nonconstant_init (tree dest, tree init)
+{
+  /* Only a CONSTRUCTOR is split; anything else initializes DEST itself.  */
+  tree ctor = init;
+  if (TREE_CODE (ctor) == TARGET_EXPR)
+    ctor = TARGET_EXPR_INITIAL (ctor);
+  if (!VAR_P (dest) || TREE_CODE (ctor) != CONSTRUCTOR)
+    return split_nonconstant_init (dest, init);
+
+  /* split_nonconstant_init removes from INIT the elements it splits out.  */
+  tree whole = unshare_expr (init);
+  tree code = split_nonconstant_init (dest, init);
+  if (!split_initializers)
+    split_initializers = decl_tree_map::create_ggc (16);
+  split_initializers->put (dest, whole);
+  return code;
+}
+
+/* True if STMT is the split initialization of a variable: part of the
+   variable's declaration, not a statement of its own.  It is one
+   initialization of a subobject of the variable, or a list of them, along
+   with the flags that build_disable_temp_cleanup adds, that starts with one.
+   The source can't initialize a subobject of a declared variable, only
+   assign to it, which is a MODIFY_EXPR.  Look at the trees rather than
+   remember the statement: a reflection of a block can be a copy.  */
+
+static bool
+split_initialization_p (tree stmt)
+{
+  if (!split_initializers)
+    return false;
+  while (stmt && (TREE_CODE (stmt) == CLEANUP_POINT_EXPR
+		  || TREE_CODE (stmt) == EXPR_STMT
+		  || TREE_CODE (stmt) == STATEMENT_LIST))
+    {
+      if (TREE_CODE (stmt) == CLEANUP_POINT_EXPR)
+	stmt = TREE_OPERAND (stmt, 0);
+      else if (TREE_CODE (stmt) == EXPR_STMT)
+	stmt = EXPR_STMT_EXPR (stmt);
+      else if (tsi_end_p (tsi_start (stmt)))
+	return false;
+      else
+	stmt = tsi_stmt (tsi_start (stmt));
+    }
+  if (!stmt || TREE_CODE (stmt) != INIT_EXPR)
+    return false;
+  tree sub = TREE_OPERAND (stmt, 0);
+  if (!handled_component_p (sub))
+    return false;
+  while (handled_component_p (sub))
+    sub = TREE_OPERAND (sub, 0);
+  return VAR_P (sub) && split_initializers->get (sub);
+}
+
 /* Append STMT, a statement of a block, to ELTS the way statements_of
    reports it.  */
 
@@ -3378,7 +3447,7 @@ static void
 append_block_statement (location_t loc, tree stmt,
 			vec<constructor_elt, va_gc> **elts)
 {
-  if (stmt && added_statement_p (stmt))
+  if (stmt && (added_statement_p (stmt) || split_initialization_p (stmt)))
     return;
   while (stmt && (TREE_CODE (stmt) == BIND_EXPR
 		  || TREE_CODE (stmt) == CLEANUP_POINT_EXPR
@@ -3809,6 +3878,11 @@ find_var_initializer_in_scope (tree var)
 {
   if (!var || !VAR_P (var))
     return NULL_TREE;
+  /* Before DECL_INITIAL, which keeps only the constant part of a split
+     initializer.  */
+  if (split_initializers)
+    if (tree *init = split_initializers->get (var))
+      return *init;
   if (DECL_INITIAL (var))
     return DECL_INITIAL (var);
 
