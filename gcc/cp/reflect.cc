@@ -3314,7 +3314,14 @@ eval_body_of (location_t loc, const constexpr_ctx *ctx, tree r,
     {
       if (!DECL_SAVED_TREE (r)
 	  && (DECL_TEMPLOID_INSTANTIATION (r) || DECL_TEMPLATE_INFO (r)))
-	instantiate_decl (r, /*defer_ok=*/false, /*expl_inst_class_mem_p=*/false);
+	{
+	  /* Don't collect garbage while the trees of the evaluation are live
+	     only on the stack.  */
+	  ++function_depth;
+	  instantiate_decl (r, /*defer_ok=*/false,
+			    /*expl_inst_class_mem_p=*/false);
+	  --function_depth;
+	}
     }
   tree body = DECL_SAVED_TREE (r);
   if (!body)
