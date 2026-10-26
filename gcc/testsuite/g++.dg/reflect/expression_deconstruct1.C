@@ -31,6 +31,10 @@ consteval int count_leaves(info node) {
     return sum;
   }
 
+  if (is_return_statement(node)) {
+    return count_leaves(return_operand_of(node));
+  }
+
   if (!is_statement(node)) {
     return 1; // Non-statement, non-expression leaf (e.g. function symbol)
   }
@@ -51,21 +55,12 @@ consteval bool run_test() {
   auto stmts = statements_of(body);
   if (stmts.size() != 1) return false;
 
-  // The returned assignment expression: res = (exp(-x) + 1.0f) + 1.0f
-  info ret_expr = stmts[0];
-  if (!is_expression(ret_expr)) return false;
-  if (operator_of(ret_expr) != operators::op_equals) return false;
+  info ret_stmt = stmts[0];
+  if (!is_statement(ret_stmt)) return false;
+  if (!is_return_statement(ret_stmt)) return false;
 
-  auto operands = operands_of(ret_expr);
-  if (operands.size() != 2) return false;
-
-  // Left operand: RESULT_DECL variable
-  info lhs = operands[0];
-  if (!is_expression(lhs)) return false;
-  if (!is_variable(lhs)) return false;
-
-  // Right operand: (exp(-x) + 1.0f) + 1.0f
-  info rhs = operands[1];
+  // The returned expression: (exp(-x) + 1.0f) + 1.0f
+  info rhs = return_operand_of(ret_stmt);
   if (!is_expression(rhs)) return false;
   if (!is_binary_operator(rhs)) return false;
   if (operator_of(rhs) != operators::op_plus) return false;
@@ -91,16 +86,15 @@ consteval bool run_test() {
   // 1.0f literal
   if (!is_literal(inner_ops[1])) return false;
 
-  auto call_ops = operands_of(call);
-  if (call_ops.size() != 2) return false;
+  // callee: exp (P4395R0 separates callee_of from operands_of)
+  if (callee_of(call) != ^^exp) return false;
 
-  // callee: exp (function symbol, not an expression)
-  if (is_expression(call_ops[0])) return false;
-  if (!is_function(call_ops[0])) return false;
+  auto call_ops = operands_of(call);
+  if (call_ops.size() != 1) return false;
 
   // argument: the actual tree is NEGATE_EXPR(NOP_EXPR(x))
   // i.e. negate -> conversion -> variable
-  info neg = call_ops[1];
+  info neg = call_ops[0];
   if (!is_unary_operator(neg)) return false;
   if (operator_of(neg) != operators::op_minus) return false;
 
@@ -118,8 +112,8 @@ consteval bool run_test() {
   if (!is_variable(conv_ops[0])) return false;
 
   // Count leaves of the sigmoid body.
-  // Leaves: res_decl, exp (function), x (variable), 1.0f, 1.0f = 5
-  if (count_leaves(body) != 5) return false;
+  // Leaves: x (variable), 1.0f, 1.0f = 3
+  if (count_leaves(body) != 3) return false;
 
   return true;
 }
