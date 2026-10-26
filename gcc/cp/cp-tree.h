@@ -1966,7 +1966,9 @@ enum reflect_kind : addr_space_t {
   /* The reflection represents a direct base relationship.  */
   REFLECT_BASE,
   /* The reflection represents an annotation.  */
-  REFLECT_ANNOTATION
+  REFLECT_ANNOTATION,
+  /* The reflection represents an identifier expression.  */
+  REFLECT_ID_EXPR
 };
 
 /* The reflect_kind of a REFLECT_EXPR.  */

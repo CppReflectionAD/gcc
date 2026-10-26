@@ -52,8 +52,9 @@ consteval bool test_id_expressions() {
   if (!is_variable_reference(ret_op)) return false;
   if (identifier_of(declaration_of(ret_op)) != "local_var") return false;
 
-  // Direct reflection of variable
-  if (!is_id_expression(^^global_var)) return false;
+  // Entity and parameter reflections are not identifier expressions.
+  if (is_id_expression(^^global_var)) return false;
+  if (is_id_expression(parameters_of(^^dummy_fn)[0])) return false;
 
   // Non-id-expressions
   if (is_id_expression(init_local)) return false; // binary op

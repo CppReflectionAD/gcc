@@ -108,6 +108,13 @@ get_reflection_raw (location_t loc, tree t, reflect_kind kind = REFLECT_UNDEF)
   return t;
 }
 
+static tree
+get_reflection_raw_expression (location_t loc, tree t)
+{
+  reflect_kind kind = DECL_P (t) ? REFLECT_ID_EXPR : REFLECT_UNDEF;
+  return get_reflection_raw (loc, t, kind);
+}
+
 /* Return the reflection for T.
 
     [basic.fundamental]: A value of type std::meta::info is called a reflection.
@@ -136,8 +143,8 @@ get_reflection_raw (location_t loc, tree t, reflect_kind kind = REFLECT_UNDEF)
     -- a direct base class relationship, or
     -- a data member description.
 
-   KIND is used to distinguish between categories that are represented
-   by the same handle.  */
+   KIND is used to distinguish between categories or expression forms that
+   are represented by the same handle.  */
 
 tree
 get_reflection (location_t loc, tree t, reflect_kind kind/*=REFLECT_UNDEF*/)
@@ -4113,7 +4120,7 @@ eval_initializer_of (location_t loc, const constexpr_ctx *ctx, tree r,
 
   tree init = extract_var_initializer (r);
   if (init)
-    return get_reflection_raw (loc, init, REFLECT_UNDEF);
+    return get_reflection_raw_expression (loc, init);
   return get_null_reflection ();
 }
 
@@ -4127,7 +4134,7 @@ eval_initializers_of (location_t loc, const constexpr_ctx *ctx, tree r,
 			    "declaration", fun, non_constant_p, jump_target);
 
   tree init = extract_var_initializer (r);
-  tree refl = init ? get_reflection_raw (loc, init, REFLECT_UNDEF)
+  tree refl = init ? get_reflection_raw_expression (loc, init)
 		   : get_null_reflection ();
   vec<constructor_elt, va_gc> *elts = nullptr;
   CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE, refl);
@@ -4183,7 +4190,7 @@ eval_expression_of (location_t loc, const constexpr_ctx *ctx, tree r,
     return throw_exception (loc, ctx,
 			    "reflection does not represent an expression "
 			    "statement", fun, non_constant_p, jump_target);
-  return get_reflection_raw (loc, r, REFLECT_UNDEF);
+  return get_reflection_raw_expression (loc, r);
 }
 
 static tree
@@ -4211,7 +4218,7 @@ eval_return_operand_of (location_t loc, const constexpr_ctx *ctx, tree r,
       if (tree var = nrv_variable (ret_val))
 	ret_val = var;
       if (ret_val)
-	return get_reflection_raw (loc, ret_val, REFLECT_UNDEF);
+	return get_reflection_raw_expression (loc, ret_val);
     }
   else if (r && (TREE_CODE (r) == INIT_EXPR || TREE_CODE (r) == MODIFY_EXPR)
 	   && TREE_OPERAND_LENGTH (r) > 1
@@ -4219,7 +4226,7 @@ eval_return_operand_of (location_t loc, const constexpr_ctx *ctx, tree r,
     {
       tree ret_val = strip_return_slot_temporary (TREE_OPERAND (r, 1));
       if (ret_val)
-	return get_reflection_raw (loc, ret_val, REFLECT_UNDEF);
+	return get_reflection_raw_expression (loc, ret_val);
     }
   return throw_exception (loc, ctx, "reflection does not represent a return statement",
 			  fun, non_constant_p, jump_target);
@@ -4332,14 +4339,16 @@ eval_is_cast (tree r)
 }
 
 static tree
-eval_is_id_expression (tree r, reflect_kind kind)
+eval_is_id_expression (tree r, bool id_expression_p)
 {
-  if (!r)
+  if (!r || !id_expression_p)
     return boolean_false_node;
+  if (TREE_CODE (r) == FUNCTION_DECL)
+    return boolean_true_node;
   if (eval_is_expression (r) != boolean_true_node)
     return boolean_false_node;
-  if (eval_is_variable (r, kind) == boolean_true_node
-      || eval_is_structured_binding (r, kind) == boolean_true_node
+  if (eval_is_variable (r, REFLECT_UNDEF) == boolean_true_node
+      || eval_is_structured_binding (r, REFLECT_UNDEF) == boolean_true_node
       || eval_is_enumerator (r) == boolean_true_node
       || TREE_CODE (r) == VAR_DECL
       || TREE_CODE (r) == PARM_DECL
@@ -4405,7 +4414,7 @@ eval_conditional_operand (location_t loc, const constexpr_ctx *ctx, tree r,
 			    "conditional expression has no such operand",
 			    fun, non_constant_p, jump_target);
 
-  return get_reflection_raw (loc, op, REFLECT_UNDEF);
+  return get_reflection_raw_expression (loc, op);
 }
 
 static tree
@@ -4582,7 +4591,7 @@ eval_callee_of (location_t loc, const constexpr_ctx *ctx, tree r,
     return get_null_reflection ();
   if (TREE_CODE (fn) == ADDR_EXPR)
     fn = TREE_OPERAND (fn, 0);
-  return get_reflection_raw (loc, fn, REFLECT_UNDEF);
+  return get_reflection_raw_expression (loc, fn);
 }
 
 static tree
@@ -4659,13 +4668,13 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		    arg = TREE_OPERAND (arg, 0);
 		  CONSTRUCTOR_APPEND_ELT
 		    (elts, NULL_TREE,
-		     get_reflection_raw (loc, arg, REFLECT_UNDEF));
+		     get_reflection_raw_expression (loc, arg));
 		}
 	      return !is_postfix_op;
 	    }
 	  first_arg = false;
 	  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-				  get_reflection_raw (loc, arg, REFLECT_UNDEF));
+				  get_reflection_raw_expression (loc, arg));
 	  return !is_postfix_op;
 	};
       if (TREE_CODE (call) == CALL_EXPR)
@@ -4706,7 +4715,7 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
       for (int i = 1; i < nargs; ++i)
 	if (tree arg = AGGR_INIT_EXPR_ARG (r, i))
 	  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-				  get_reflection_raw (loc, arg, REFLECT_UNDEF));
+				  get_reflection_raw_expression (loc, arg));
     }
   else if (code == CONSTRUCTOR)
     {
@@ -4715,7 +4724,7 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
       FOR_EACH_CONSTRUCTOR_VALUE (CONSTRUCTOR_ELTS (r), ix, val)
 	if (val)
 	  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-				  get_reflection_raw (loc, val, REFLECT_UNDEF));
+				  get_reflection_raw_expression (loc, val));
     }
   else
     {
@@ -4735,7 +4744,7 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
 				&& VOID_TYPE_P (TREE_TYPE (op)))))
 		op = TREE_OPERAND (op, 0);
 	    CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-				    get_reflection_raw (loc, op, REFLECT_UNDEF));
+				    get_reflection_raw_expression (loc, op));
 	  }
     }
 
@@ -9633,6 +9642,10 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
 	gcc_unreachable ();
       }
 
+  bool id_expression_p = kind == REFLECT_ID_EXPR;
+  if (id_expression_p)
+    kind = REFLECT_UNDEF;
+
   switch (minfo->code)
     {
     case METAFN_OPERATOR_OF:
@@ -9899,7 +9912,7 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
     case METAFN_IS_CONSTRUCT:
       return eval_is_construct (h);
     case METAFN_IS_ID_EXPRESSION:
-      return eval_is_id_expression (h, kind);
+      return eval_is_id_expression (h, id_expression_p);
     case METAFN_IS_CONDITIONAL_OPERATOR:
       return eval_is_conditional_operator (h);
     case METAFN_CONDITION_OF:
