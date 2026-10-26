@@ -2558,6 +2558,12 @@ eval_operator_of (location_t loc, const constexpr_ctx *ctx, tree r,
     code = TRUNC_DIV_EXPR;
   else if (code == CEIL_MOD_EXPR || code == FLOOR_MOD_EXPR || code == ROUND_MOD_EXPR)
     code = TRUNC_MOD_EXPR;
+  else if (code == TRUTH_AND_EXPR)
+    code = TRUTH_ANDIF_EXPR;
+  else if (code == TRUTH_OR_EXPR)
+    code = TRUTH_ORIF_EXPR;
+  else if (code == TRUTH_XOR_EXPR)
+    code = BIT_XOR_EXPR;
 
   if (code == MODIFY_EXPR || code == INIT_EXPR)
     return build_int_cst (ret_type, meta_operators[1][OVL_OP_NOP_EXPR]);
@@ -4410,6 +4416,31 @@ eval_is_binary_operator (tree r)
 }
 
 static tree
+eval_is_operator_expression (tree r)
+{
+  if (eval_is_expression (r) != boolean_true_node)
+    return boolean_false_node;
+  r = strip_return_slot_temporary (STRIP_REFERENCE_REF (r));
+  if (!r)
+    return boolean_false_node;
+
+  if (tree call = unwrap_call_expr (r))
+    {
+      if (CALL_EXPR_OPERATOR_SYNTAX (call))
+	if (tree fn = cp_get_callee_fndecl_nofold (call))
+	  if (eval_is_operator_function (fn) == boolean_true_node)
+	    return boolean_true_node;
+      return boolean_false_node;
+    }
+
+  if (eval_is_unary_operator (r) == boolean_true_node
+      || eval_is_binary_operator (r) == boolean_true_node)
+    return boolean_true_node;
+
+  return boolean_false_node;
+}
+
+static tree
 eval_is_prefix (tree r)
 {
   if (eval_is_expression (r) != boolean_true_node)
@@ -4474,6 +4505,24 @@ eval_callee_of (location_t loc, const constexpr_ctx *ctx, tree r,
   if (TREE_CODE (fn) == ADDR_EXPR)
     fn = TREE_OPERAND (fn, 0);
   return get_reflection_raw (loc, fn, REFLECT_UNDEF);
+}
+
+static tree
+eval_expression_operator_of (location_t loc, const constexpr_ctx *ctx, tree r,
+			     bool *non_constant_p, tree *jump_target,
+			     tree ret_type, tree fun)
+{
+  if (eval_is_operator_expression (r) != boolean_true_node)
+    return throw_exception (loc, ctx,
+			    "reflection does not represent an operator "
+			    "expression", fun, non_constant_p, jump_target);
+
+  if (tree call = unwrap_call_expr (r))
+    if (CALL_EXPR_OPERATOR_SYNTAX (call))
+      r = call;
+  r = strip_return_slot_temporary (STRIP_REFERENCE_REF (r));
+  return eval_operator_of (loc, ctx, r, non_constant_p, jump_target, ret_type,
+			   fun);
 }
 
 static tree
@@ -9483,6 +9532,9 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
     case METAFN_OPERATOR_OF:
       return eval_operator_of (loc, ctx, h, non_constant_p, jump_target,
 			       rettype, fun);
+    case METAFN_EXPRESSION_OPERATOR_OF:
+      return eval_expression_operator_of (loc, ctx, h, non_constant_p,
+					  jump_target, rettype, fun);
     case METAFN_SYMBOL_OF:
       return eval_symbol_of (loc, ctx, expr, non_constant_p, jump_target,
 			     char_type_node, rettype, fun);
@@ -9716,6 +9768,8 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
       return eval_return_operand_of (loc, ctx, h, non_constant_p, jump_target, fun);
     case METAFN_IS_LITERAL:
       return eval_is_literal (h);
+    case METAFN_IS_OPERATOR_EXPRESSION:
+      return eval_is_operator_expression (h);
     case METAFN_IS_UNARY_OPERATOR:
       return eval_is_unary_operator (h);
     case METAFN_IS_BINARY_OPERATOR:
