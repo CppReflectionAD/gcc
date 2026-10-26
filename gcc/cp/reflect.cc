@@ -4331,6 +4331,24 @@ eval_is_cast (tree r)
   return eval_is_conversion (r);
 }
 
+static tree
+eval_is_id_expression (tree r, reflect_kind kind)
+{
+  if (!r)
+    return boolean_false_node;
+  if (eval_is_expression (r) != boolean_true_node)
+    return boolean_false_node;
+  if (eval_is_variable (r, kind) == boolean_true_node
+      || eval_is_structured_binding (r, kind) == boolean_true_node
+      || eval_is_enumerator (r) == boolean_true_node
+      || TREE_CODE (r) == VAR_DECL
+      || TREE_CODE (r) == PARM_DECL
+      || TREE_CODE (r) == RESULT_DECL
+      || TREE_CODE (r) == CONST_DECL)
+    return boolean_true_node;
+  return boolean_false_node;
+}
+
 /* Return the COND_EXPR behind R, or NULL_TREE if R does not represent one.
 
    A conditional expression `c ? a : b` and a genericized `if` statement are
@@ -9858,6 +9876,8 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
       return eval_is_cast (h);
     case METAFN_IS_CONSTRUCT:
       return eval_is_construct (h);
+    case METAFN_IS_ID_EXPRESSION:
+      return eval_is_id_expression (h, kind);
     case METAFN_IS_CONDITIONAL_OPERATOR:
       return eval_is_conditional_operator (h);
     case METAFN_CONDITION_OF:

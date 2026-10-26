@@ -338,7 +338,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     consteval operators expression_operator_of(info);
     consteval info declaration_of(info);
     consteval vector<info> operands_of(info);
-    consteval bool is_variable_reference(info __i) { return is_variable(__i); }
+    consteval bool is_id_expression(info);
+    consteval bool is_variable_reference(info __i) { return is_id_expression(__i); }
     consteval bool is_conversion(info);
     consteval bool is_cast(info);
     consteval bool is_construct(info);
