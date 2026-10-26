@@ -3892,8 +3892,10 @@ eval_initializer_of (location_t loc, const constexpr_ctx *ctx, tree r,
   else if (init && VAR_P (init))
     init = find_var_initializer_in_scope (init);
 
+  /* Skip the INIT_EXPR of a temporary, but not a MODIFY_EXPR: that is an
+     assignment the initializer makes, as in `double b = (a = e);`.  */
   init = unwrap_statement_wrappers (init);
-  if (init && (TREE_CODE (init) == INIT_EXPR || TREE_CODE (init) == MODIFY_EXPR))
+  if (init && TREE_CODE (init) == INIT_EXPR)
     init = TREE_OPERAND (init, 1);
 
   if (init)
