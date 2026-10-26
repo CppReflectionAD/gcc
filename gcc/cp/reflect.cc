@@ -4638,29 +4638,51 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
 
   if (tree call = unwrap_call_expr (r))
     {
+      tree fn = (TREE_CODE (call) == CALL_EXPR)
+	? cp_get_callee_fndecl_nofold (call) : AGGR_INIT_EXPR_FN (call);
+      if (fn && TREE_CODE (fn) == ADDR_EXPR)
+	fn = TREE_OPERAND (fn, 0);
+      bool member_call = (fn && TREE_CODE (fn) == FUNCTION_DECL
+			  && DECL_IOBJ_MEMBER_FUNCTION_P (fn));
+      bool operator_member_call
+	= member_call && CALL_EXPR_OPERATOR_SYNTAX (call);
+      bool first_arg = true;
+      auto add_operand = [&] (tree arg)
+	{
+	  if (first_arg && member_call)
+	    {
+	      first_arg = false;
+	      if (operator_member_call)
+		{
+		  arg = STRIP_NOPS (arg);
+		  if (TREE_CODE (arg) == ADDR_EXPR)
+		    arg = TREE_OPERAND (arg, 0);
+		  CONSTRUCTOR_APPEND_ELT
+		    (elts, NULL_TREE,
+		     get_reflection_raw (loc, arg, REFLECT_UNDEF));
+		}
+	      return !is_postfix_op;
+	    }
+	  first_arg = false;
+	  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+				  get_reflection_raw (loc, arg, REFLECT_UNDEF));
+	  return !is_postfix_op;
+	};
       if (TREE_CODE (call) == CALL_EXPR)
 	{
 	  call_expr_arg_iterator ai;
 	  for (tree arg = first_call_expr_arg (call, &ai); arg;
 	       arg = next_call_expr_arg (&ai))
-	    {
-	      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-				      get_reflection_raw (loc, arg, REFLECT_UNDEF));
-	      if (is_postfix_op)
-		break;
-	    }
+	    if (!add_operand (arg))
+	      break;
 	}
       else
 	{
 	  aggr_init_expr_arg_iterator ai;
 	  for (tree arg = first_aggr_init_expr_arg (call, &ai); arg;
 	       arg = next_aggr_init_expr_arg (&ai))
-	    {
-	      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-				      get_reflection_raw (loc, arg, REFLECT_UNDEF));
-	      if (is_postfix_op)
-		break;
-	    }
+	    if (!add_operand (arg))
+	      break;
 	}
       return get_vector_of_info_elts (elts);
     }
