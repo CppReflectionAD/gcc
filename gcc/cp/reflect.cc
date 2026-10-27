@@ -4011,8 +4011,8 @@ strip_return_slot_temporary (tree v)
 }
 
 static tree
-eval_return_value_of (location_t loc, const constexpr_ctx *ctx, tree r,
-		      bool *non_constant_p, tree *jump_target, tree fun)
+eval_return_operand_of (location_t loc, const constexpr_ctx *ctx, tree r,
+			bool *non_constant_p, tree *jump_target, tree fun)
 {
   r = unwrap_statement_wrappers (r);
   if (!r)
@@ -8191,16 +8191,17 @@ class_members_of (location_t loc, const constexpr_ctx *ctx, tree r,
     {
       tree m = field;
       if (TREE_CODE (field) == FIELD_DECL && DECL_ARTIFICIAL (field))
-	continue; /* Ignore bases and the vptr.  */
+	/* Ignore bases and the vptr.  */
+	continue;
+      else if (DECL_CLONED_FUNCTION_P (field))
+	/* Ignore cloned cdtors.  */
+	continue;
       else if (DECL_SELF_REFERENCE_P (field))
 	continue;
       else if (TREE_CODE (field) == TYPE_DECL)
 	m = TREE_TYPE (field);
       else if (TREE_CODE (field) == FUNCTION_DECL)
 	{
-	  /* Ignore cloned cdtors.  */
-	  if (DECL_CLONED_FUNCTION_P (field))
-	    continue;
 	  /* Ignore functions with unsatisfied constraints.  */
 	  if (!constraints_satisfied_p (field))
 	    continue;
@@ -9434,8 +9435,8 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
       return eval_declared_variable_of (loc, ctx, h, non_constant_p, jump_target, fun);
     case METAFN_INITIALIZER_OF:
       return eval_initializer_of (loc, ctx, h, non_constant_p, jump_target, fun);
-    case METAFN_RETURN_VALUE_OF:
-      return eval_return_value_of (loc, ctx, h, non_constant_p, jump_target, fun);
+    case METAFN_RETURN_OPERAND_OF:
+      return eval_return_operand_of (loc, ctx, h, non_constant_p, jump_target, fun);
     case METAFN_IS_LITERAL:
       return eval_is_literal (h);
     case METAFN_IS_UNARY_OPERATOR:
