@@ -11117,6 +11117,13 @@ reflection_mangle_prefix (tree refl, char prefix[3])
       strcpy (prefix, "nu");
       return NULL_TREE;
     }
+  /* An id-expression compares unequal to a reflection of the entity it
+     names, so it mangles as "id" followed by that reflection.  */
+  if (kind == REFLECT_ID_EXPR)
+    {
+      strcpy (prefix, "id");
+      return get_reflection_raw (EXPR_LOCATION (refl), h);
+    }
   if (eval_is_value (kind) == boolean_true_node)
     {
       strcpy (prefix, "vl");
