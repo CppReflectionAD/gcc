@@ -2539,6 +2539,20 @@ strip_return_slot_temporary (tree v)
   return v;
 }
 
+/* The function that CALL calls, or NULL_TREE if it isn't known.  Unlike
+   cp_get_callee_fndecl_nofold, this sees through a virtual call (an
+   OBJ_TYPE_REF) to the member function it names, so that `b.f (x)` and
+   `b * x` answer the same whether or not f and operator* are virtual.  */
+
+static tree
+call_fndecl (tree call)
+{
+  tree fn = cp_get_callee (call);
+  if (fn && TREE_CODE (fn) == OBJ_TYPE_REF)
+    return resolve_virtual_fun_from_obj_type_ref (fn);
+  return cp_get_callee_fndecl_nofold (call);
+}
+
 static tree
 eval_operator_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		  bool *non_constant_p, tree *jump_target, tree ret_type,
@@ -2550,7 +2564,7 @@ eval_operator_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		: NULL_TREE;
   if (call && (TREE_CODE (call) == CALL_EXPR || aggr_init_call_p (call))
       && CALL_EXPR_OPERATOR_SYNTAX (call))
-    if (tree fn = cp_get_callee_fndecl_nofold (call))
+    if (tree fn = call_fndecl (call))
       if (eval_is_operator_function (fn) == boolean_true_node)
 	r = fn;
 
@@ -4530,7 +4544,7 @@ eval_is_operator_expression (tree r)
   if (tree call = unwrap_call_expr (r))
     {
       if (CALL_EXPR_OPERATOR_SYNTAX (call))
-	if (tree fn = cp_get_callee_fndecl_nofold (call))
+	if (tree fn = call_fndecl (call))
 	  if (eval_is_operator_function (fn) == boolean_true_node)
 	    return boolean_true_node;
       return boolean_false_node;
@@ -4556,7 +4570,7 @@ eval_is_prefix (tree r)
     return boolean_true_node;
   if ((code == CALL_EXPR || aggr_init_call_p (r))
       && CALL_EXPR_OPERATOR_SYNTAX (r))
-    if (tree fn = cp_get_callee_fndecl_nofold (r))
+    if (tree fn = call_fndecl (r))
       if (DECL_OVERLOADED_OPERATOR_P (fn)
 	  && (DECL_OVERLOADED_OPERATOR_IS (fn, PREINCREMENT_EXPR)
 	      || DECL_OVERLOADED_OPERATOR_IS (fn, PREDECREMENT_EXPR)))
@@ -4577,7 +4591,7 @@ eval_is_postfix (tree r)
     return boolean_true_node;
   if ((code == CALL_EXPR || aggr_init_call_p (r))
       && CALL_EXPR_OPERATOR_SYNTAX (r))
-    if (tree fn = cp_get_callee_fndecl_nofold (r))
+    if (tree fn = call_fndecl (r))
       if (DECL_OVERLOADED_OPERATOR_P (fn)
 	  && (DECL_OVERLOADED_OPERATOR_IS (fn, POSTINCREMENT_EXPR)
 	      || DECL_OVERLOADED_OPERATOR_IS (fn, POSTDECREMENT_EXPR)))
@@ -4607,6 +4621,9 @@ eval_callee_of (location_t loc, const constexpr_ctx *ctx, tree r,
     return get_null_reflection ();
   if (TREE_CODE (fn) == ADDR_EXPR)
     fn = TREE_OPERAND (fn, 0);
+  else if (TREE_CODE (fn) == OBJ_TYPE_REF)
+    /* A virtual call names the function as a non-virtual call does.  */
+    fn = resolve_virtual_fun_from_obj_type_ref (fn);
   return get_reflection_raw_expression (loc, fn);
 }
 
@@ -4663,10 +4680,7 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
 
   if (tree call = unwrap_call_expr (r))
     {
-      tree fn = (TREE_CODE (call) == CALL_EXPR)
-	? cp_get_callee_fndecl_nofold (call) : AGGR_INIT_EXPR_FN (call);
-      if (fn && TREE_CODE (fn) == ADDR_EXPR)
-	fn = TREE_OPERAND (fn, 0);
+      tree fn = call_fndecl (call);
       bool member_call = (fn && TREE_CODE (fn) == FUNCTION_DECL
 			  && DECL_IOBJ_MEMBER_FUNCTION_P (fn));
       bool operator_member_call
@@ -4680,6 +4694,11 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
 	      if (operator_member_call)
 		{
 		  arg = STRIP_NOPS (arg);
+		  /* A virtual call uses its object twice, for the vtable and
+		     as `this`, so it saves an object with side effects, as in
+		     `pick (b) * x`.  */
+		  if (TREE_CODE (arg) == SAVE_EXPR)
+		    arg = STRIP_NOPS (TREE_OPERAND (arg, 0));
 		  if (TREE_CODE (arg) == ADDR_EXPR)
 		    arg = TREE_OPERAND (arg, 0);
 		  else if (TYPE_PTR_P (TREE_TYPE (arg)))
