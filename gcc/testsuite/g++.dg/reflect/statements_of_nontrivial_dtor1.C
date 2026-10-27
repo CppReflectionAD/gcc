@@ -1,6 +1,6 @@
 // { dg-do compile { target c++26 } }
 // { dg-additional-options "-freflection" }
-// Test std::meta::statements_of and return_value_of on bodies that use a
+// Test std::meta::statements_of and return_operand_of on bodies that use a
 // class with a non-trivial destructor.
 
 #include <meta>
@@ -39,7 +39,7 @@ return_of (info fn)
 consteval bool
 returns_call_to (info fn, info callee)
 {
-  info v = return_value_of (return_of (fn));
+  info v = return_operand_of (return_of (fn));
   return is_function_call (v) && callee_of (v) == callee;
 }
 
@@ -52,5 +52,5 @@ static_assert (statements_of (body_of (^^d_local_then_return)).size ()
 // `return f (x);` returns a call, whether or not the class is trivial.
 static_assert (returns_call_to (^^t_return_call, ^^make_t));
 static_assert (returns_call_to (^^d_return_call, ^^make_d));
-static_assert (operands_of (return_value_of (return_of (^^d_return_call)))
+static_assert (operands_of (return_operand_of (return_of (^^d_return_call)))
 	       .size () == 2);
