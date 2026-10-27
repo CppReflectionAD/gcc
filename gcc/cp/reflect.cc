@@ -4243,9 +4243,10 @@ eval_is_literal (tree r)
 }
 
 /* True if R is a conversion.  That includes the dereference that
-   convert_from_reference puts around a call returning a reference, or a
-   use of a reference, as in `return std::max (x, y);`: it isn't a `*` in
-   the source but the lvalue the reference refers to.  */
+   convert_from_reference puts around a use of a reference: it isn't a `*`
+   in the source but the lvalue the reference refers to.  Around a call
+   returning a reference, as in `return std::max (x, y);`, the dereference
+   is the call itself (see unwrap_call_expr), not a conversion of it.  */
 
 static bool
 is_cast_tree (tree r)
@@ -4257,8 +4258,13 @@ is_cast_tree (tree r)
   if (!r)
     return false;
   tree_code code = TREE_CODE (r);
-  return (REFERENCE_REF_P (r)
-	  || code == CONVERT_EXPR
+  if (REFERENCE_REF_P (r))
+    {
+      tree inner = strip_return_slot_temporary (TREE_OPERAND (r, 0));
+      return !(inner
+	       && (TREE_CODE (inner) == CALL_EXPR || aggr_init_call_p (inner)));
+    }
+  return (code == CONVERT_EXPR
 	  || code == NOP_EXPR
 	  || code == VIEW_CONVERT_EXPR
 	  || code == FLOAT_EXPR
@@ -4741,9 +4747,8 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
       // a `const double &` parameter.  The source has no `&`: the operand
       // is the lvalue.
       CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-			      get_reflection_raw (loc,
-						  TREE_OPERAND (TREE_OPERAND (r, 0), 0),
-						  REFLECT_UNDEF));
+			      get_reflection_raw_expression
+				(loc, TREE_OPERAND (TREE_OPERAND (r, 0), 0)));
     }
   else
     {
