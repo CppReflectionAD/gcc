@@ -24,6 +24,7 @@ struct Counter
   int v;
   constexpr Counter &operator++ () { ++v; return *this; }
   constexpr Counter operator++ (int) { Counter old = *this; ++v; return old; }
+  constexpr int operator* (int x) const { return v * x; }
   constexpr int add (int x) const { return v + x; }
 };
 
@@ -50,6 +51,12 @@ member_calls_body (Counter c, int x)
   ++c;
   c++;
   return c.add (x);
+}
+
+constexpr int
+member_operator_body (Counter c, int x)
+{
+  return c * x;
 }
 
 consteval bool
@@ -121,7 +128,7 @@ static_assert (callee_of (cd) == ^^make_d);
 static_assert (operands_of (cd).size () == 2);
 
 // Overloaded prefix ++c and postfix c++ both have 1 operand (the dummy int on
-// postfix ++ is excluded), and member call c.add(x) has 2 operands (&c, x).
+// postfix ++ is excluded), and member call c.add(x) has 1 operand (x).
 constexpr info mc0 = expression_of (statements_of (body_of (^^member_calls_body))[0]);
 constexpr info mc1 = expression_of (statements_of (body_of (^^member_calls_body))[1]);
 constexpr info mc2 = return_operand_of (statements_of (body_of (^^member_calls_body))[2]);
@@ -132,7 +139,18 @@ static_assert (is_function_call (mc1) && is_postfix (mc1));
 static_assert (operands_of (mc1).size () == 1);
 static_assert (is_function_call (mc2));
 static_assert (callee_of (mc2) == ^^Counter::add);
-static_assert (operands_of (mc2).size () == 2);
+static_assert (operands_of (mc2).size () == 1);
+static_assert (identifier_of (declaration_of (operands_of (mc2)[0])) == "x");
+
+// For a member operator call, report the object expression rather than its
+// implicit address argument.
+constexpr info mo = return_operand_of
+  (statements_of (body_of (^^member_operator_body))[0]);
+static_assert (is_operator_expression (mo));
+static_assert (operands_of (mo).size () == 2);
+static_assert (!is_operator_expression (operands_of (mo)[0]));
+static_assert (identifier_of (declaration_of (operands_of (mo)[0])) == "c");
+static_assert (identifier_of (declaration_of (operands_of (mo)[1])) == "x");
 
 // Exception checks: callee_of throws on non-call expressions and non-expressions.
 static_assert (can_callee_of (c0));
