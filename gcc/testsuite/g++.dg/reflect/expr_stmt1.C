@@ -122,7 +122,7 @@ test_expr_statements ()
   if (!check_expr_stmt (stmts[6]))
     return false;
   info e6 = expression_of (stmts[6]);
-  if (!is_function_call (e6) || callee_of (e6) != ^^sink)
+  if (!is_function_call (e6) || declaration_of (callee_of (e6)) != ^^sink)
     return false;
 
   // 7: a = 3, b = 4;
@@ -141,7 +141,7 @@ test_expr_statements ()
   if (!check_expr_stmt (stmts[8]))
     return false;
   info e8 = expression_of (stmts[8]);
-  if (!is_function_call (e8) || callee_of (e8) != ^^make_d)
+  if (!is_function_call (e8) || declaration_of (callee_of (e8)) != ^^make_d)
     return false;
 
   // 9: if (x > 0) a = x; else a = -x;

@@ -17,7 +17,7 @@ constexpr float sigmoid(float x) {
 
 consteval int count_leaves(info node) {
   if (is_expression(node)) {
-    if (is_variable(node) || is_literal(node)) {
+    if (is_id_expression(node) || is_variable(node) || is_literal(node)) {
       return 1;
     }
     auto operands = operands_of(node);
@@ -87,7 +87,8 @@ consteval bool run_test() {
   if (!is_literal(inner_ops[1])) return false;
 
   // callee: exp (P4395R0 separates callee_of from operands_of)
-  if (callee_of(call) != ^^exp) return false;
+  if (declaration_of(callee_of(call)) != ^^exp) return false;
+  if (!is_id_expression(callee_of(call))) return false;
 
   auto call_ops = operands_of(call);
   if (call_ops.size() != 1) return false;
@@ -108,8 +109,9 @@ consteval bool run_test() {
   auto conv_ops = operands_of(conv);
   if (conv_ops.size() != 1) return false;
 
-  // x (PARM_DECL variable)
-  if (!is_variable(conv_ops[0])) return false;
+  // x (PARM_DECL variable in expression context -> id-expression)
+  if (!is_id_expression(conv_ops[0])) return false;
+  if (identifier_of(declaration_of(conv_ops[0])) != "x") return false;
 
   // Count leaves of the sigmoid body.
   // Leaves: x (variable), 1.0f, 1.0f = 3

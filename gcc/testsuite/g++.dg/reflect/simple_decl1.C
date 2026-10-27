@@ -139,7 +139,8 @@ constexpr info s_d = statements_of (body_of (^^d_local))[0];
 static_assert (is_simple_declaration (s_d));
 static_assert (identifier_of (declarators_of (s_d)[0]) == "a");
 static_assert (is_function_call (initializers_of (s_d)[0]));
-static_assert (callee_of (initializers_of (s_d)[0]) == ^^make_d);
+static_assert (is_id_expression (callee_of (initializers_of (s_d)[0])));
+static_assert (declaration_of (callee_of (initializers_of (s_d)[0])) == ^^make_d);
 
 // Negative cases and exception checks.
 constexpr info s_ret = statements_of (body_of (^^initialized_local))[1];
