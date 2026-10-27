@@ -3380,17 +3380,12 @@ eval_body_of (location_t loc, const constexpr_ctx *ctx, tree r,
     return throw_exception (loc, ctx, "reflection does not represent a function",
 			    fun, non_constant_p, jump_target);
 
-  r = maybe_get_first_fn (r);
-  if (r && DECL_P (r))
-    {
-      if (!DECL_SAVED_TREE (r)
-	  && (DECL_TEMPLOID_INSTANTIATION (r) || DECL_TEMPLATE_INFO (r)))
-	instantiate_decl (r, /*defer_ok=*/false, /*expl_inst_class_mem_p=*/false);
-    }
-  tree body = DECL_SAVED_TREE (r);
-  if (!body || DECL_DELETED_FN (r) || DECL_DEFAULTED_FN (r))
+  if (eval_has_body (r) != boolean_true_node)
     return throw_exception (loc, ctx, "function is not defined",
 			    fun, non_constant_p, jump_target);
+
+  r = maybe_get_first_fn (r);
+  tree body = DECL_SAVED_TREE (r);
 
   if (TREE_CODE (body) != BIND_EXPR && TREE_CODE (body) != STATEMENT_LIST)
     body = build3_loc (DECL_SOURCE_LOCATION (r), BIND_EXPR, void_type_node,
