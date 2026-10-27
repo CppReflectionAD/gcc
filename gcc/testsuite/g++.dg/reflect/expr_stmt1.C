@@ -94,10 +94,18 @@ test_expr_statements ()
     return false;
 
   // 3: a += 2;
+  // Note: GCC lowers built-in compound assignments early in the front end
+  // to `a = a + 2` (MODIFY_EXPR with op_equals), whereas Clang preserves
+  // `+=` (op_plus_equals with operands {a, 2}).
   if (!check_expr_stmt (stmts[3]))
     return false;
   info e3 = expression_of (stmts[3]);
-  if (!is_binary_operator (e3))
+  if (!is_binary_operator (e3) || operator_of (e3) != operators::op_equals)
+    return false;
+  auto ops3 = operands_of (e3);
+  if (ops3.size () != 2 || !is_variable (ops3[0]) || !is_binary_operator (ops3[1]))
+    return false;
+  if (operator_of (ops3[1]) != operators::op_plus)
     return false;
 
   // 4: ++a;
