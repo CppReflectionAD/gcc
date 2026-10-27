@@ -9668,7 +9668,34 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
 
   bool id_expression_p = kind == REFLECT_ID_EXPR;
   if (id_expression_p)
-    kind = REFLECT_UNDEF;
+    {
+      /* An id-expression is an expression, not the entity it names: it
+	 answers like `a + b` does, except that is_id_expression is true and
+	 declaration_of gives the entity.  So is_variable, is_function,
+	 has_identifier and the other entity predicates are false, and
+	 queries such as identifier_of or parent_of throw, as on clang.  */
+      switch (minfo->code)
+	{
+	case METAFN_IS_EXPRESSION:
+	case METAFN_IS_ID_EXPRESSION:
+	  return boolean_true_node;
+	case METAFN_OPERANDS_OF:
+	  return get_vector_of_info_elts (nullptr);
+	case METAFN_DECLARATION_OF:
+	case METAFN_SOURCE_LOCATION_OF:
+	case METAFN_DISPLAY_STRING_OF:
+	case METAFN_U8DISPLAY_STRING_OF:
+	  kind = REFLECT_UNDEF;
+	  break;
+	default:
+	  if (METAFN_KIND_RET (minfo) == METAFN_KIND_RET_BOOL)
+	    return boolean_false_node;
+	  return throw_exception (loc, ctx,
+				  "reflection represents an id-expression, "
+				  "not an entity", fun, non_constant_p,
+				  jump_target);
+	}
+    }
 
   switch (minfo->code)
     {

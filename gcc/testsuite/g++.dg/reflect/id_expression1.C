@@ -29,7 +29,11 @@ consteval bool test_id_expressions() {
   info op_a = add_ops[0];
   if (!is_id_expression(op_a)) return false;
   if (!is_variable_reference(op_a)) return false;
-  if (!is_variable(op_a)) return false;
+  // An id-expression is an expression, not the variable it names.
+  if (!is_expression(op_a)) return false;
+  if (is_variable(op_a)) return false;
+  if (has_identifier(op_a)) return false;
+  if (!operands_of(op_a).empty()) return false;
   if (identifier_of(declaration_of(op_a)) != "a") return false;
 
   // add_ops[1] is parameter b
