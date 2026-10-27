@@ -108,10 +108,14 @@ get_reflection_raw (location_t loc, tree t, reflect_kind kind = REFLECT_UNDEF)
   return t;
 }
 
+/* Create a REFLECT_EXPR for the expression T.  A use of a declaration is an
+   id-expression, except for `this`, which is a keyword.  */
+
 static tree
 get_reflection_raw_expression (location_t loc, tree t)
 {
-  reflect_kind kind = DECL_P (t) ? REFLECT_ID_EXPR : REFLECT_UNDEF;
+  reflect_kind kind = (DECL_P (t) && !is_this_parameter (t)
+		       ? REFLECT_ID_EXPR : REFLECT_UNDEF);
   return get_reflection_raw (loc, t, kind);
 }
 
@@ -4678,6 +4682,13 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		  arg = STRIP_NOPS (arg);
 		  if (TREE_CODE (arg) == ADDR_EXPR)
 		    arg = TREE_OPERAND (arg, 0);
+		  else if (TYPE_PTR_P (TREE_TYPE (arg)))
+		    /* For `*p * x` or `*this * x`, `&*p` has folded to `p`,
+		       but the object in the source is the dereference.  (A
+		       reference object stays the reference: `r * x` has the
+		       operand `r`.)  */
+		    arg = build1_loc (EXPR_LOCATION (arg), INDIRECT_REF,
+				      TREE_TYPE (TREE_TYPE (arg)), arg);
 		  CONSTRUCTOR_APPEND_ELT
 		    (elts, NULL_TREE,
 		     get_reflection_raw_expression (loc, arg));
