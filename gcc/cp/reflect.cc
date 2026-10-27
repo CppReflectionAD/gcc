@@ -3690,7 +3690,10 @@ eval_is_statement (tree r)
   switch (code)
     {
     case STATEMENT_LIST:
+      return boolean_true_node;
     case BIND_EXPR:
+      return (!TREE_TYPE (r) || VOID_TYPE_P (TREE_TYPE (r)))
+	     ? boolean_true_node : boolean_false_node;
     case EXPR_STMT:
     case CLEANUP_POINT_EXPR:
     case IF_STMT:
@@ -3726,8 +3729,11 @@ eval_is_compound_statement (tree r)
 {
   if (!r)
     return boolean_false_node;
-  if (TREE_CODE (r) == BIND_EXPR || TREE_CODE (r) == STATEMENT_LIST)
+  if (TREE_CODE (r) == STATEMENT_LIST)
     return boolean_true_node;
+  if (TREE_CODE (r) == BIND_EXPR)
+    return (!TREE_TYPE (r) || VOID_TYPE_P (TREE_TYPE (r)))
+	   ? boolean_true_node : boolean_false_node;
   return boolean_false_node;
 }
 
@@ -3753,7 +3759,8 @@ eval_is_expression (tree r)
 static tree
 unwrap_statement_wrappers (tree r)
 {
-  while (r && (TREE_CODE (r) == BIND_EXPR
+  while (r && ((TREE_CODE (r) == BIND_EXPR
+		&& (!TREE_TYPE (r) || VOID_TYPE_P (TREE_TYPE (r))))
 	       || TREE_CODE (r) == CLEANUP_POINT_EXPR
 	       || TREE_CODE (r) == EXPR_STMT
 	       || TREE_CODE (r) == CONVERT_EXPR
