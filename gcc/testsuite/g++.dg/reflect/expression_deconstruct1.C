@@ -40,7 +40,7 @@ consteval int count_leaves(info node) {
   }
 
   auto children = statements_of(node);
-  if (children.size() == 1 && children[0] == node) {
+  if (children.empty()) {
     return 1;
   }
   int sum = 0;

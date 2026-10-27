@@ -3676,11 +3676,6 @@ eval_statements_of (location_t loc, const constexpr_ctx *ctx, tree r,
 	    CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
 				    get_reflection_raw (loc, TREE_OPERAND (r, 0), REFLECT_UNDEF));
 	}
-      else
-	{
-	  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-				  get_reflection_raw (loc, r, REFLECT_UNDEF));
-	}
     }
 
   return get_vector_of_info_elts (elts);
