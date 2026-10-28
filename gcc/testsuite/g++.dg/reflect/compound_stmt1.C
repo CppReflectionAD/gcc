@@ -121,3 +121,29 @@ static_assert (!is_compound_statement (^^tmpl_fn));
 static_assert (!is_compound_statement (^^global_var));
 static_assert (!is_compound_statement (^^::));
 static_assert (!is_compound_statement (return_operand_of (statements_of (body_of (^^single_ret))[0])));
+
+// GNU statement-expression `({ ... })` is an expression, not a statement
+// or compound statement.
+constexpr double
+stmt_expr_fn (double x)
+{
+  return __extension__ ({ double t = x; t * 2; });
+}
+
+constexpr info ret_stmt = statements_of (body_of (^^stmt_expr_fn))[0];
+constexpr info ret_expr = return_operand_of (ret_stmt);
+static_assert (is_expression (ret_expr));
+static_assert (!is_statement (ret_expr));
+static_assert (!is_compound_statement (ret_expr));
+
+constexpr void
+stmt_expr_stmt (int x)
+{
+  __extension__ ({ int t = x; t + 1; });
+}
+
+constexpr info es = statements_of (body_of (^^stmt_expr_stmt))[0];
+static_assert (is_expression_statement (es));
+static_assert (!is_compound_statement (es));
+static_assert (is_expression (expression_of (es)));
+static_assert (!is_statement (expression_of (es)));

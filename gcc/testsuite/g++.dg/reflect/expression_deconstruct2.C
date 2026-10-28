@@ -49,9 +49,7 @@ consteval void collect_all_expressions(info node, std::vector<fixed_string>& res
   }
   if (is_statement(node)) {
     for (info child : statements_of(node)) {
-      if (child != node) {
-        collect_all_expressions(child, res);
-      }
+      collect_all_expressions(child, res);
     }
   }
 }

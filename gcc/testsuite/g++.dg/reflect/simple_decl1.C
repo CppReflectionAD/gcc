@@ -115,19 +115,38 @@ static_assert (!is_declaration_statement (s_assign));
 static_assert (!is_simple_declaration (s_assign));
 
 // Multiple declarators (`int a = 1, b, c = a + x;`).
-constexpr info m0 = statements_of (body_of (^^multi_declarator))[0];
-constexpr info m1 = statements_of (body_of (^^multi_declarator))[1];
-constexpr info m2 = statements_of (body_of (^^multi_declarator))[2];
-static_assert (is_simple_declaration (m0));
-static_assert (is_simple_declaration (m1));
-static_assert (is_simple_declaration (m2));
-static_assert (identifier_of (declarators_of (m0)[0]) == "a");
-static_assert (identifier_of (declarators_of (m1)[0]) == "b");
-static_assert (identifier_of (declarators_of (m2)[0]) == "c");
-static_assert (is_literal (initializers_of (m0)[0]));
-static_assert (initializers_of (m1)[0] == info{});
-static_assert (is_binary_operator (initializers_of (m2)[0]));
-static_assert (operator_of (initializers_of (m2)[0]) == operators::op_plus);
+// P4395 specifies that `int a = 1, b, c = a + x;` is a single simple-declaration
+// statement with 3 declarators and 3 initializers. In GCC, each declarator
+// currently produces a separate DECL_EXPR statement. Mark as XFAIL until implemented.
+consteval bool
+check_multi_declarator ()
+{
+  auto stmts = statements_of (body_of (^^multi_declarator));
+  if (stmts.size () != 3)
+    return false;
+  info m = stmts[0];
+  if (!is_simple_declaration (m))
+    return false;
+  auto decls = declarators_of (m);
+  if (decls.size () != 3)
+    return false;
+  if (identifier_of (decls[0]) != "a"
+      || identifier_of (decls[1]) != "b"
+      || identifier_of (decls[2]) != "c")
+    return false;
+  auto inits = initializers_of (m);
+  if (inits.size () != 3)
+    return false;
+  if (!is_literal (inits[0]))
+    return false;
+  if (inits[1] != info{})
+    return false;
+  if (!is_binary_operator (inits[2])
+      || operator_of (inits[2]) != operators::op_plus)
+    return false;
+  return true;
+}
+static_assert (check_multi_declarator ()); // { dg-bogus "static assertion failed" "" { xfail *-*-* } }
 
 // Cast in initializer is preserved.
 constexpr info s_cast = statements_of (body_of (^^cast_initializer))[0];

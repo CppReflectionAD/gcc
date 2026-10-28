@@ -3398,17 +3398,12 @@ eval_body_of (location_t loc, const constexpr_ctx *ctx, tree r,
     return throw_exception (loc, ctx, "reflection does not represent a function",
 			    fun, non_constant_p, jump_target);
 
-  r = maybe_get_first_fn (r);
-  if (r && DECL_P (r))
-    {
-      if (!DECL_SAVED_TREE (r)
-	  && (DECL_TEMPLOID_INSTANTIATION (r) || DECL_TEMPLATE_INFO (r)))
-	instantiate_decl (r, /*defer_ok=*/false, /*expl_inst_class_mem_p=*/false);
-    }
-  tree body = DECL_SAVED_TREE (r);
-  if (!body || DECL_DELETED_FN (r) || DECL_DEFAULTED_FN (r))
+  if (eval_has_body (r) != boolean_true_node)
     return throw_exception (loc, ctx, "function is not defined",
 			    fun, non_constant_p, jump_target);
+
+  r = maybe_get_first_fn (r);
+  tree body = DECL_SAVED_TREE (r);
 
   if (TREE_CODE (body) != BIND_EXPR && TREE_CODE (body) != STATEMENT_LIST)
     body = build3_loc (DECL_SOURCE_LOCATION (r), BIND_EXPR, void_type_node,
@@ -3699,11 +3694,6 @@ eval_statements_of (location_t loc, const constexpr_ctx *ctx, tree r,
 	    CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
 				    get_reflection_raw (loc, TREE_OPERAND (r, 0), REFLECT_UNDEF));
 	}
-      else
-	{
-	  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-				  get_reflection_raw (loc, r, REFLECT_UNDEF));
-	}
     }
 
   return get_vector_of_info_elts (elts);
@@ -3718,7 +3708,10 @@ eval_is_statement (tree r)
   switch (code)
     {
     case STATEMENT_LIST:
+      return boolean_true_node;
     case BIND_EXPR:
+      return (!TREE_TYPE (r) || VOID_TYPE_P (TREE_TYPE (r)))
+	     ? boolean_true_node : boolean_false_node;
     case EXPR_STMT:
     case CLEANUP_POINT_EXPR:
     case IF_STMT:
@@ -3754,8 +3747,11 @@ eval_is_compound_statement (tree r)
 {
   if (!r)
     return boolean_false_node;
-  if (TREE_CODE (r) == BIND_EXPR || TREE_CODE (r) == STATEMENT_LIST)
+  if (TREE_CODE (r) == STATEMENT_LIST)
     return boolean_true_node;
+  if (TREE_CODE (r) == BIND_EXPR)
+    return (!TREE_TYPE (r) || VOID_TYPE_P (TREE_TYPE (r)))
+	   ? boolean_true_node : boolean_false_node;
   return boolean_false_node;
 }
 
@@ -3781,7 +3777,8 @@ eval_is_expression (tree r)
 static tree
 unwrap_statement_wrappers (tree r)
 {
-  while (r && (TREE_CODE (r) == BIND_EXPR
+  while (r && ((TREE_CODE (r) == BIND_EXPR
+		&& (!TREE_TYPE (r) || VOID_TYPE_P (TREE_TYPE (r))))
 	       || TREE_CODE (r) == CLEANUP_POINT_EXPR
 	       || TREE_CODE (r) == EXPR_STMT
 	       || TREE_CODE (r) == CONVERT_EXPR
