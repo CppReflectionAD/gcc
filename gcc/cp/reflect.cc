@@ -108,10 +108,14 @@ get_reflection_raw (location_t loc, tree t, reflect_kind kind = REFLECT_UNDEF)
   return t;
 }
 
+/* Create a REFLECT_EXPR for the expression T.  A use of a declaration is an
+   id-expression, except for `this`, which is a keyword.  */
+
 static tree
 get_reflection_raw_expression (location_t loc, tree t)
 {
-  reflect_kind kind = DECL_P (t) ? REFLECT_ID_EXPR : REFLECT_UNDEF;
+  reflect_kind kind = (DECL_P (t) && !is_this_parameter (t)
+		       ? REFLECT_ID_EXPR : REFLECT_UNDEF);
   return get_reflection_raw (loc, t, kind);
 }
 
@@ -2535,6 +2539,20 @@ strip_return_slot_temporary (tree v)
   return v;
 }
 
+/* The function that CALL calls, or NULL_TREE if it isn't known.  Unlike
+   cp_get_callee_fndecl_nofold, this sees through a virtual call (an
+   OBJ_TYPE_REF) to the member function it names, so that `b.f (x)` and
+   `b * x` answer the same whether or not f and operator* are virtual.  */
+
+static tree
+call_fndecl (tree call)
+{
+  tree fn = cp_get_callee (call);
+  if (fn && TREE_CODE (fn) == OBJ_TYPE_REF)
+    return resolve_virtual_fun_from_obj_type_ref (fn);
+  return cp_get_callee_fndecl_nofold (call);
+}
+
 static tree
 eval_operator_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		  bool *non_constant_p, tree *jump_target, tree ret_type,
@@ -2546,7 +2564,7 @@ eval_operator_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		: NULL_TREE;
   if (call && (TREE_CODE (call) == CALL_EXPR || aggr_init_call_p (call))
       && CALL_EXPR_OPERATOR_SYNTAX (call))
-    if (tree fn = cp_get_callee_fndecl_nofold (call))
+    if (tree fn = call_fndecl (call))
       if (eval_is_operator_function (fn) == boolean_true_node)
 	r = fn;
 
@@ -2578,7 +2596,7 @@ eval_operator_of (location_t loc, const constexpr_ctx *ctx, tree r,
   if (code == NON_LVALUE_EXPR)
     return build_int_cst (ret_type, meta_operators[0][OVL_OP_PLUS_EXPR]);
 
-  if (code < MAX_TREE_CODES)
+  if (code < MAX_TREE_CODES && !REFERENCE_REF_P (r))
     {
       int j = ovl_op_mapping[code];
       if (j != OVL_OP_ERROR_MARK)
@@ -4239,6 +4257,12 @@ eval_is_literal (tree r)
   return boolean_false_node;
 }
 
+/* True if R is a conversion.  That includes the dereference that
+   convert_from_reference puts around a use of a reference: it isn't a `*`
+   in the source but the lvalue the reference refers to.  Around a call
+   returning a reference, as in `return std::max (x, y);`, the dereference
+   is the call itself (see unwrap_call_expr), not a conversion of it.  */
+
 static bool
 is_cast_tree (tree r)
 {
@@ -4249,6 +4273,12 @@ is_cast_tree (tree r)
   if (!r)
     return false;
   tree_code code = TREE_CODE (r);
+  if (REFERENCE_REF_P (r))
+    {
+      tree inner = strip_return_slot_temporary (TREE_OPERAND (r, 0));
+      return !(inner
+	       && (TREE_CODE (inner) == CALL_EXPR || aggr_init_call_p (inner)));
+    }
   return (code == CONVERT_EXPR
 	  || code == NOP_EXPR
 	  || code == VIEW_CONVERT_EXPR
@@ -4511,7 +4541,7 @@ eval_is_operator_expression (tree r)
   if (tree call = unwrap_call_expr (r))
     {
       if (CALL_EXPR_OPERATOR_SYNTAX (call))
-	if (tree fn = cp_get_callee_fndecl_nofold (call))
+	if (tree fn = call_fndecl (call))
 	  if (eval_is_operator_function (fn) == boolean_true_node)
 	    return boolean_true_node;
       return boolean_false_node;
@@ -4537,7 +4567,7 @@ eval_is_prefix (tree r)
     return boolean_true_node;
   if ((code == CALL_EXPR || aggr_init_call_p (r))
       && CALL_EXPR_OPERATOR_SYNTAX (r))
-    if (tree fn = cp_get_callee_fndecl_nofold (r))
+    if (tree fn = call_fndecl (r))
       if (DECL_OVERLOADED_OPERATOR_P (fn)
 	  && (DECL_OVERLOADED_OPERATOR_IS (fn, PREINCREMENT_EXPR)
 	      || DECL_OVERLOADED_OPERATOR_IS (fn, PREDECREMENT_EXPR)))
@@ -4558,7 +4588,7 @@ eval_is_postfix (tree r)
     return boolean_true_node;
   if ((code == CALL_EXPR || aggr_init_call_p (r))
       && CALL_EXPR_OPERATOR_SYNTAX (r))
-    if (tree fn = cp_get_callee_fndecl_nofold (r))
+    if (tree fn = call_fndecl (r))
       if (DECL_OVERLOADED_OPERATOR_P (fn)
 	  && (DECL_OVERLOADED_OPERATOR_IS (fn, POSTINCREMENT_EXPR)
 	      || DECL_OVERLOADED_OPERATOR_IS (fn, POSTDECREMENT_EXPR)))
@@ -4588,6 +4618,9 @@ eval_callee_of (location_t loc, const constexpr_ctx *ctx, tree r,
     return get_null_reflection ();
   if (TREE_CODE (fn) == ADDR_EXPR)
     fn = TREE_OPERAND (fn, 0);
+  else if (TREE_CODE (fn) == OBJ_TYPE_REF)
+    /* A virtual call names the function as a non-virtual call does.  */
+    fn = resolve_virtual_fun_from_obj_type_ref (fn);
   return get_reflection_raw_expression (loc, fn);
 }
 
@@ -4644,10 +4677,7 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
 
   if (tree call = unwrap_call_expr (r))
     {
-      tree fn = (TREE_CODE (call) == CALL_EXPR)
-	? cp_get_callee_fndecl_nofold (call) : AGGR_INIT_EXPR_FN (call);
-      if (fn && TREE_CODE (fn) == ADDR_EXPR)
-	fn = TREE_OPERAND (fn, 0);
+      tree fn = call_fndecl (call);
       bool member_call = (fn && TREE_CODE (fn) == FUNCTION_DECL
 			  && DECL_IOBJ_MEMBER_FUNCTION_P (fn));
       bool operator_member_call
@@ -4661,8 +4691,20 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
 	      if (operator_member_call)
 		{
 		  arg = STRIP_NOPS (arg);
+		  /* A virtual call uses its object twice, for the vtable and
+		     as `this`, so it saves an object with side effects, as in
+		     `pick (b) * x`.  */
+		  if (TREE_CODE (arg) == SAVE_EXPR)
+		    arg = STRIP_NOPS (TREE_OPERAND (arg, 0));
 		  if (TREE_CODE (arg) == ADDR_EXPR)
 		    arg = TREE_OPERAND (arg, 0);
+		  else if (TYPE_PTR_P (TREE_TYPE (arg)))
+		    /* For `*p * x` or `*this * x`, `&*p` has folded to `p`,
+		       but the object in the source is the dereference.  (A
+		       reference object stays the reference: `r * x` has the
+		       operand `r`.)  */
+		    arg = build1_loc (EXPR_LOCATION (arg), INDIRECT_REF,
+				      TREE_TYPE (TREE_TYPE (arg)), arg);
 		  CONSTRUCTOR_APPEND_ELT
 		    (elts, NULL_TREE,
 		     get_reflection_raw_expression (loc, arg));
@@ -4722,6 +4764,18 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
 	if (val)
 	  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
 				  get_reflection_raw_expression (loc, val));
+    }
+  else if (CONVERT_EXPR_P (r)
+	   && TYPE_REF_P (TREE_TYPE (r))
+	   && TREE_CODE (TREE_OPERAND (r, 0)) == ADDR_EXPR)
+    {
+      // Binding a reference to an lvalue converts the lvalue's address to
+      // the reference type, as in `(const double &) &x` for `x` passed to
+      // a `const double &` parameter.  The source has no `&`: the operand
+      // is the lvalue.
+      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+			      get_reflection_raw_expression
+				(loc, TREE_OPERAND (TREE_OPERAND (r, 0), 0)));
     }
   else
     {
@@ -9641,7 +9695,34 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
 
   bool id_expression_p = kind == REFLECT_ID_EXPR;
   if (id_expression_p)
-    kind = REFLECT_UNDEF;
+    {
+      /* An id-expression is an expression, not the entity it names: it
+	 answers like `a + b` does, except that is_id_expression is true and
+	 declaration_of gives the entity.  So is_variable, is_function,
+	 has_identifier and the other entity predicates are false, and
+	 queries such as identifier_of or parent_of throw, as on clang.  */
+      switch (minfo->code)
+	{
+	case METAFN_IS_EXPRESSION:
+	case METAFN_IS_ID_EXPRESSION:
+	  return boolean_true_node;
+	case METAFN_OPERANDS_OF:
+	  return get_vector_of_info_elts (nullptr);
+	case METAFN_DECLARATION_OF:
+	case METAFN_SOURCE_LOCATION_OF:
+	case METAFN_DISPLAY_STRING_OF:
+	case METAFN_U8DISPLAY_STRING_OF:
+	  kind = REFLECT_UNDEF;
+	  break;
+	default:
+	  if (METAFN_KIND_RET (minfo) == METAFN_KIND_RET_BOOL)
+	    return boolean_false_node;
+	  return throw_exception (loc, ctx,
+				  "reflection represents an id-expression, "
+				  "not an entity", fun, non_constant_p,
+				  jump_target);
+	}
+    }
 
   switch (minfo->code)
     {
@@ -11062,6 +11143,13 @@ reflection_mangle_prefix (tree refl, char prefix[3])
     {
       strcpy (prefix, "nu");
       return NULL_TREE;
+    }
+  /* An id-expression compares unequal to a reflection of the entity it
+     names, so it mangles as "id" followed by that reflection.  */
+  if (kind == REFLECT_ID_EXPR)
+    {
+      strcpy (prefix, "id");
+      return get_reflection_raw (EXPR_LOCATION (refl), h);
     }
   if (eval_is_value (kind) == boolean_true_node)
     {
