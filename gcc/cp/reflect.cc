@@ -1269,9 +1269,6 @@ maybe_init_meta_operators (location_t loc)
 static tree
 eval_is_variable (const_tree r, reflect_kind kind)
 {
-  if (kind == REFLECT_ID_EXPR)
-    return boolean_false_node;
-
   /* ^^param is a variable but parameters_of(parent_of(^^param))[0] is not.  */
   if ((TREE_CODE (r) == PARM_DECL && kind != REFLECT_PARM)
       || (TREE_CODE (r) == RESULT_DECL)
@@ -1345,10 +1342,8 @@ eval_is_namespace_alias (const_tree r)
    Returns: true if r represents a function.  Otherwise, false.  */
 
 static tree
-eval_is_function (tree r, reflect_kind kind = REFLECT_UNDEF)
+eval_is_function (tree r)
 {
-  if (kind == REFLECT_ID_EXPR)
-    return boolean_false_node;
   r = maybe_get_first_fn (r);
 
   if (TREE_CODE (r) == FUNCTION_DECL)
@@ -1473,9 +1468,6 @@ get_type_info_vec (location_t loc, const constexpr_ctx *ctx, tree call, int n,
 static tree
 eval_is_structured_binding (const_tree r, reflect_kind kind)
 {
-  if (kind == REFLECT_ID_EXPR)
-    return boolean_false_node;
-
   if (DECL_DECOMPOSITION_P (r)
       && !DECL_DECOMP_IS_BASE (r)
       && kind != REFLECT_VAR)
@@ -3746,20 +3738,20 @@ eval_is_compound_statement (tree r)
 }
 
 static tree
-eval_is_expression (tree r, reflect_kind kind = REFLECT_UNDEF)
+eval_is_expression (tree r)
 {
   if (!r)
     return boolean_false_node;
   if (eval_is_statement (r) == boolean_true_node)
     return boolean_false_node;
-  if (kind == REFLECT_ID_EXPR)
-    return boolean_true_node;
-  if (DECL_P (r))
-    return boolean_false_node;
   tree_code code = TREE_CODE (r);
   if (EXPR_P (r)
       || CONSTANT_CLASS_P (r)
-      || code == CONSTRUCTOR)
+      || code == CONSTRUCTOR
+      || code == VAR_DECL
+      || code == PARM_DECL
+      || code == CONST_DECL
+      || code == RESULT_DECL)
     return boolean_true_node;
   return boolean_false_node;
 }
@@ -4344,11 +4336,23 @@ eval_is_cast (tree r)
 }
 
 static tree
-eval_is_id_expression (tree r, reflect_kind kind)
+eval_is_id_expression (tree r, bool id_expression_p)
 {
-  if (!r || kind != REFLECT_ID_EXPR)
+  if (!r || !id_expression_p)
     return boolean_false_node;
-  return boolean_true_node;
+  if (TREE_CODE (r) == FUNCTION_DECL)
+    return boolean_true_node;
+  if (eval_is_expression (r) != boolean_true_node)
+    return boolean_false_node;
+  if (eval_is_variable (r, REFLECT_UNDEF) == boolean_true_node
+      || eval_is_structured_binding (r, REFLECT_UNDEF) == boolean_true_node
+      || eval_is_enumerator (r) == boolean_true_node
+      || TREE_CODE (r) == VAR_DECL
+      || TREE_CODE (r) == PARM_DECL
+      || TREE_CODE (r) == RESULT_DECL
+      || TREE_CODE (r) == CONST_DECL)
+    return boolean_true_node;
+  return boolean_false_node;
 }
 
 /* Return the COND_EXPR behind R, or NULL_TREE if R does not represent one.
@@ -4629,15 +4633,11 @@ eval_declaration_of (location_t loc, const constexpr_ctx *ctx, tree r,
 
 static tree
 eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
-		  reflect_kind kind,
 		  bool *non_constant_p, tree *jump_target, tree fun)
 {
-  if (eval_is_expression (r, kind) == boolean_false_node)
+  if (eval_is_expression (r) == boolean_false_node)
     return throw_exception (loc, ctx, "reflection does not represent an expression",
 			    fun, non_constant_p, jump_target);
-
-  if (kind == REFLECT_ID_EXPR)
-    return get_vector_of_info_elts (nullptr);
 
   vec<constructor_elt, va_gc> *elts = nullptr;
   bool is_postfix_op = (eval_is_postfix (r) == boolean_true_node);
@@ -9639,6 +9639,10 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
 	gcc_unreachable ();
       }
 
+  bool id_expression_p = kind == REFLECT_ID_EXPR;
+  if (id_expression_p)
+    kind = REFLECT_UNDEF;
+
   switch (minfo->code)
     {
     case METAFN_OPERATOR_OF:
@@ -9752,54 +9756,30 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
     case METAFN_IS_NAMESPACE_ALIAS:
       return eval_is_namespace_alias (h);
     case METAFN_IS_FUNCTION:
-      return eval_is_function (h, kind);
+      return eval_is_function (h);
     case METAFN_IS_CONVERSION_FUNCTION:
-      if (kind == REFLECT_ID_EXPR)
-	return boolean_false_node;
       return eval_is_conversion_function (h);
     case METAFN_IS_OPERATOR_FUNCTION:
-      if (kind == REFLECT_ID_EXPR)
-	return boolean_false_node;
       return eval_is_operator_function (h);
     case METAFN_IS_LITERAL_OPERATOR:
-      if (kind == REFLECT_ID_EXPR)
-	return boolean_false_node;
       return eval_is_literal_operator (h);
     case METAFN_IS_SPECIAL_MEMBER_FUNCTION:
-      if (kind == REFLECT_ID_EXPR)
-	return boolean_false_node;
       return eval_is_special_member_function (h);
     case METAFN_IS_CONSTRUCTOR:
-      if (kind == REFLECT_ID_EXPR)
-	return boolean_false_node;
       return eval_is_constructor (h);
     case METAFN_IS_DEFAULT_CONSTRUCTOR:
-      if (kind == REFLECT_ID_EXPR)
-	return boolean_false_node;
       return eval_is_default_constructor (h);
     case METAFN_IS_COPY_CONSTRUCTOR:
-      if (kind == REFLECT_ID_EXPR)
-	return boolean_false_node;
       return eval_is_copy_constructor (h);
     case METAFN_IS_MOVE_CONSTRUCTOR:
-      if (kind == REFLECT_ID_EXPR)
-	return boolean_false_node;
       return eval_is_move_constructor (h);
     case METAFN_IS_ASSIGNMENT:
-      if (kind == REFLECT_ID_EXPR)
-	return boolean_false_node;
       return eval_is_assignment (h);
     case METAFN_IS_COPY_ASSIGNMENT:
-      if (kind == REFLECT_ID_EXPR)
-	return boolean_false_node;
       return eval_is_copy_assignment (h);
     case METAFN_IS_MOVE_ASSIGNMENT:
-      if (kind == REFLECT_ID_EXPR)
-	return boolean_false_node;
       return eval_is_move_assignment (h);
     case METAFN_IS_DESTRUCTOR:
-      if (kind == REFLECT_ID_EXPR)
-	return boolean_false_node;
       return eval_is_destructor (h);
     case METAFN_IS_FUNCTION_PARAMETER:
       return eval_is_function_parameter (h, kind);
@@ -9885,7 +9865,7 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
     case METAFN_EXPRESSION_OF:
       return eval_expression_of (loc, ctx, h, non_constant_p, jump_target, fun);
     case METAFN_IS_EXPRESSION:
-      return eval_is_expression (h, kind);
+      return eval_is_expression (h);
     case METAFN_IS_RETURN_STATEMENT:
       return eval_is_return_statement (h);
     case METAFN_IS_DECLARATION_STATEMENT:
@@ -9921,7 +9901,7 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
     case METAFN_DECLARATION_OF:
       return eval_declaration_of (loc, ctx, h, non_constant_p, jump_target, fun);
     case METAFN_OPERANDS_OF:
-      return eval_operands_of (loc, ctx, h, kind, non_constant_p, jump_target, fun);
+      return eval_operands_of (loc, ctx, h, non_constant_p, jump_target, fun);
     case METAFN_IS_CONVERSION:
       return eval_is_conversion (h);
     case METAFN_IS_CAST:
@@ -9929,7 +9909,7 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
     case METAFN_IS_CONSTRUCT:
       return eval_is_construct (h);
     case METAFN_IS_ID_EXPRESSION:
-      return eval_is_id_expression (h, kind);
+      return eval_is_id_expression (h, id_expression_p);
     case METAFN_IS_CONDITIONAL_OPERATOR:
       return eval_is_conditional_operator (h);
     case METAFN_CONDITION_OF:
@@ -11093,11 +11073,6 @@ reflection_mangle_prefix (tree refl, char prefix[3])
   if (eval_is_object (kind) == boolean_true_node)
     {
       strcpy (prefix, "ob");
-      return h;
-    }
-  if (kind == REFLECT_ID_EXPR)
-    {
-      strcpy (prefix, "id");
       return h;
     }
   if (eval_is_variable (h, kind) == boolean_true_node)

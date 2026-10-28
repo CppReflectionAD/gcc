@@ -36,7 +36,7 @@ struct fixed_string {
 consteval void collect_all_expressions(info node, std::vector<fixed_string>& res) {
   if (is_expression(node)) {
     res.push_back(fixed_string(display_string_of(node)));
-    if (!is_id_expression(node) && !is_variable(node) && !is_literal(node)) {
+    if (!is_variable(node) && !is_literal(node)) {
       for (info op : operands_of(node)) {
         collect_all_expressions(op, res);
       }

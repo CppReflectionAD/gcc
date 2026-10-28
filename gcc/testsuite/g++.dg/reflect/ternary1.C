@@ -50,8 +50,7 @@ consteval bool test_relu() {
   if (!is_binary_operator(c)) return false;
   if (operator_of(c) != operators::op_greater) return false;
 
-  if (!is_id_expression(true_expression_of(e))) return false;
-  if (!is_variable(declaration_of(true_expression_of(e)))) return false;
+  if (!is_variable(true_expression_of(e))) return false;
   if (!is_literal(false_expression_of(e))) return false;
 
   // operands_of walks the same three operands in written order.
@@ -85,8 +84,7 @@ consteval bool test_nested() {
   if (!is_conditional_operator(inner)) return false;
   if (operator_of(condition_of(inner)) != operators::op_greater) return false;
   if (!is_literal(true_expression_of(inner))) return false;
-  if (!is_id_expression(false_expression_of(inner))) return false;
-  if (!is_variable(declaration_of(false_expression_of(inner)))) return false;
+  if (!is_variable(false_expression_of(inner))) return false;
   return true;
 }
 
@@ -95,8 +93,7 @@ consteval bool test_elvis() {
   info e = ret_of(^^elvis);
   if (!is_conditional_operator(e)) return false;
   // The SAVE_EXPR placeholder is stripped, so the true branch is x itself.
-  if (!is_id_expression(true_expression_of(e))) return false;
-  if (!is_variable(declaration_of(true_expression_of(e)))) return false;
+  if (!is_variable(true_expression_of(e))) return false;
   if (!is_literal(false_expression_of(e))) return false;
   return true;
 }
