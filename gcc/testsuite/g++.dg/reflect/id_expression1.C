@@ -13,6 +13,10 @@ int dummy_fn(int a, int b) {
   return local_var;
 }
 
+int call_fn() {
+  return dummy_fn(1, 2);
+}
+
 consteval bool test_id_expressions() {
   using namespace std::meta;
 
@@ -28,20 +32,28 @@ consteval bool test_id_expressions() {
   // add_ops[0] is parameter a
   info op_a = add_ops[0];
   if (!is_id_expression(op_a)) return false;
+  if (!is_expression(op_a)) return false;
   if (!is_variable_reference(op_a)) return false;
-  if (!is_variable(op_a)) return false;
+  if (is_variable(op_a)) return false;
+  if (!is_variable(declaration_of(op_a))) return false;
   if (identifier_of(declaration_of(op_a)) != "a") return false;
 
   // add_ops[1] is parameter b
   info op_b = add_ops[1];
   if (!is_id_expression(op_b)) return false;
+  if (!is_expression(op_b)) return false;
   if (!is_variable_reference(op_b)) return false;
+  if (is_variable(op_b)) return false;
+  if (!is_variable(declaration_of(op_b))) return false;
   if (identifier_of(declaration_of(op_b)) != "b") return false;
 
   // 1: int g = global_var;
   info init_g = initializers_of(stmts[1])[0];
   if (!is_id_expression(init_g)) return false;
+  if (!is_expression(init_g)) return false;
   if (!is_variable_reference(init_g)) return false;
+  if (is_variable(init_g)) return false;
+  if (!is_variable(declaration_of(init_g))) return false;
   if (identifier_of(declaration_of(init_g)) != "global_var") return false;
 
   // 2: return local_var;
@@ -49,12 +61,28 @@ consteval bool test_id_expressions() {
   if (!is_return_statement(ret_stmt)) return false;
   info ret_op = return_operand_of(ret_stmt);
   if (!is_id_expression(ret_op)) return false;
+  if (!is_expression(ret_op)) return false;
   if (!is_variable_reference(ret_op)) return false;
+  if (is_variable(ret_op)) return false;
+  if (!is_variable(declaration_of(ret_op))) return false;
   if (identifier_of(declaration_of(ret_op)) != "local_var") return false;
 
-  // Entity and parameter reflections are not identifier expressions.
+  // Callee id-expression
+  info call = return_operand_of(statements_of(body_of(^^call_fn))[0]);
+  info callee = callee_of(call);
+  if (!is_id_expression(callee)) return false;
+  if (!is_expression(callee)) return false;
+  if (is_function(callee)) return false;
+  if (!is_function(declaration_of(callee))) return false;
+  if (declaration_of(callee) != ^^dummy_fn) return false;
+  if (operands_of(callee).size() != 0) return false;
+
+  // Entity and parameter reflections are not identifier expressions or expressions.
   if (is_id_expression(^^global_var)) return false;
+  if (is_expression(^^global_var)) return false;
   if (is_id_expression(parameters_of(^^dummy_fn)[0])) return false;
+  if (is_expression(parameters_of(^^dummy_fn)[0])) return false;
+  if (is_expression(^^dummy_fn)) return false;
 
   // Non-id-expressions
   if (is_id_expression(init_local)) return false; // binary op

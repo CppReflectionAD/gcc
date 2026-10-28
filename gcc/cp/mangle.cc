@@ -4254,6 +4254,20 @@ write_reflection (tree refl)
     return;
   if (strcmp (prefix, "vl") == 0 || strcmp (prefix, "ob") == 0)
     write_expression (arg);
+  else if (strcmp (prefix, "id") == 0)
+    {
+      if (TREE_CODE (arg) == FUNCTION_DECL)
+	write_encoding (arg);
+      else if (TREE_CODE (arg) == PARM_DECL)
+	{
+	  tree fn = DECL_CONTEXT (arg);
+	  const int idx = DECL_PARM_INDEX (arg) - 1;
+	  write_compact_number (idx);
+	  write_encoding (fn);
+	}
+      else
+	write_name (arg);
+    }
   else if (strcmp (prefix, "vr") == 0 || strcmp (prefix, "sb") == 0)
     write_name (arg);
   else if (strcmp (prefix, "fn") == 0)

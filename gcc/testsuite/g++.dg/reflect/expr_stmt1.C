@@ -90,7 +90,8 @@ test_expr_statements ()
   if (!is_binary_operator (e2) || operator_of (e2) != operators::op_equals)
     return false;
   auto ops2 = operands_of (e2);
-  if (ops2.size () != 2 || !is_variable (ops2[0]) || !is_binary_operator (ops2[1]))
+  if (ops2.size () != 2 || !is_id_expression (ops2[0])
+      || !is_variable (declaration_of (ops2[0])) || !is_binary_operator (ops2[1]))
     return false;
 
   // 3: a += 2;
@@ -103,7 +104,8 @@ test_expr_statements ()
   if (!is_binary_operator (e3) || operator_of (e3) != operators::op_equals)
     return false;
   auto ops3 = operands_of (e3);
-  if (ops3.size () != 2 || !is_variable (ops3[0]) || !is_binary_operator (ops3[1]))
+  if (ops3.size () != 2 || !is_id_expression (ops3[0])
+      || !is_variable (declaration_of (ops3[0])) || !is_binary_operator (ops3[1]))
     return false;
   if (operator_of (ops3[1]) != operators::op_plus)
     return false;
@@ -114,7 +116,8 @@ test_expr_statements ()
   info e4 = expression_of (stmts[4]);
   if (!is_unary_operator (e4) || operator_of (e4) != operators::op_plus_plus)
     return false;
-  if (operands_of (e4).size () != 1 || !is_variable (operands_of (e4)[0]))
+  if (operands_of (e4).size () != 1 || !is_id_expression (operands_of (e4)[0])
+      || !is_variable (declaration_of (operands_of (e4)[0])))
     return false;
 
   // 5: a++;
@@ -123,7 +126,8 @@ test_expr_statements ()
   info e5 = expression_of (stmts[5]);
   if (!is_unary_operator (e5) || operator_of (e5) != operators::op_plus_plus)
     return false;
-  if (operands_of (e5).size () != 1 || !is_variable (operands_of (e5)[0]))
+  if (operands_of (e5).size () != 1 || !is_id_expression (operands_of (e5)[0])
+      || !is_variable (declaration_of (operands_of (e5)[0])))
     return false;
 
   // 6: sink (a);
