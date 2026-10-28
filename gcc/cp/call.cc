@@ -5627,11 +5627,7 @@ build_op_call (tree obj, vec<tree, va_gc> **args, tsubst_flags_t complain)
 	  result = build_over_call (cand, LOOKUP_NORMAL, complain);
 	  if (result && result != error_mark_node)
 	    if (tree call = extract_call_expr (result))
-	      {
-		CALL_EXPR_OPERATOR_SYNTAX (call) = true;
-		/* The object is sequenced before the arguments (P0145R3).  */
-		CALL_EXPR_ORDERED_ARGS (call) = true;
-	      }
+	      CALL_EXPR_OPERATOR_SYNTAX (call) = true;
 	  /* In an expression of the form `a()' where cand->fn
 	     which is operator() turns out to be a static member function,
 	     `a' is none-the-less evaluated.  */
