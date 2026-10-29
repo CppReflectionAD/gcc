@@ -4773,9 +4773,17 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
       // the reference type, as in `(const double &) &x` for `x` passed to
       // a `const double &` parameter.  The source has no `&`: the operand
       // is the lvalue.
+      tree op = TREE_OPERAND (TREE_OPERAND (r, 0), 0);
+      // Binding it to a prvalue of non-class type, as for `x - y`, takes
+      // the address of a temporary initialized from the prvalue.  The source
+      // has no temporary either: the operand is the prvalue, as on clang.
+      // (A class prvalue is a construct, which keeps its temporary.)
+      if (TREE_CODE (op) == TARGET_EXPR
+	  && TARGET_EXPR_INITIAL (op)
+	  && !CLASS_TYPE_P (TREE_TYPE (op)))
+	op = TARGET_EXPR_INITIAL (op);
       CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-			      get_reflection_raw_expression
-				(loc, TREE_OPERAND (TREE_OPERAND (r, 0), 0)));
+			      get_reflection_raw_expression (loc, op));
     }
   else
     {
