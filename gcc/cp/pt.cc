@@ -20013,6 +20013,8 @@ tsubst_stmt (tree t, tree args, tsubst_flags_t complain, tree in_decl)
 		   do.  */
 		if (VAR_P (decl))
 		  DECL_TEMPLATE_INSTANTIATED (decl) = 1;
+		if (flag_reflection && VAR_P (decl) && VAR_P (pattern_decl))
+		  reflection_instantiate_declarator (pattern_decl, decl);
 		if (VAR_P (decl) && !DECL_NAME (decl)
 		    && ANON_AGGR_TYPE_P (TREE_TYPE (decl)))
 		  /* Anonymous aggregates are a special case.  */

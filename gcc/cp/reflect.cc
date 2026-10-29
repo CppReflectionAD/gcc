@@ -3524,6 +3524,88 @@ reflection_record_constructor_init (tree var, tree call)
   split_initializers->put (var, init);
 }
 
+/* A declaration with several declarators, as in `double a = x, b = a * a;`,
+   is one declaration statement, but GCC declares each variable with a
+   DECL_EXPR of its own, and nothing in the trees says which DECL_EXPRs came
+   from one declaration.  Under -freflection, the parser records the
+   variables of a declaration whose declarators all declare local variables,
+   and the instantiation of a template records those of the instantiated
+   declaration.  Each of the variables maps to the same TREE_VEC of all of
+   them, in order.  */
+
+static GTY(()) decl_tree_map *declaration_declarators;
+
+/* Record VARS, the variables of a declaration with more than one
+   declarator.  */
+
+void
+reflection_record_declarators (const vec<tree> &vars)
+{
+  tree group = make_tree_vec (vars.length ());
+  for (unsigned i = 0; i < vars.length (); ++i)
+    TREE_VEC_ELT (group, i) = vars[i];
+  if (!declaration_declarators)
+    declaration_declarators = decl_tree_map::create_ggc (16);
+  for (tree var : vars)
+    declaration_declarators->put (var, group);
+}
+
+/* DECL is the instantiation of PATTERN, a local variable of a template.  If
+   PATTERN is one of the variables of a declaration with more than one
+   declarator, record DECL in the same place among those of the instantiated
+   declaration.  The first variable's instantiation, which comes first, makes
+   that group, and the rest find it as the local specialization of the first
+   variable's pattern.  */
+
+void
+reflection_instantiate_declarator (tree pattern, tree decl)
+{
+  if (!declaration_declarators)
+    return;
+  tree *pattern_group = declaration_declarators->get (pattern);
+  if (!pattern_group)
+    return;
+  int n = TREE_VEC_LENGTH (*pattern_group);
+  int i = 0;
+  while (i < n && TREE_VEC_ELT (*pattern_group, i) != pattern)
+    ++i;
+  if (i == n)
+    return;
+  tree group;
+  if (i == 0)
+    group = make_tree_vec (n);
+  else
+    {
+      tree first = (retrieve_local_specialization
+		    (TREE_VEC_ELT (*pattern_group, 0)));
+      tree *first_group = (first && VAR_P (first)
+			   ? declaration_declarators->get (first) : NULL);
+      if (!first_group || TREE_VEC_LENGTH (*first_group) != n)
+	return;
+      group = *first_group;
+    }
+  TREE_VEC_ELT (group, i) = decl;
+  declaration_declarators->put (decl, group);
+}
+
+/* The variables of the declaration that declares VAR if it has more than
+   one declarator, otherwise NULL_TREE.  An instantiation that didn't record
+   every variable doesn't count.  */
+
+static tree
+declaration_group (tree var)
+{
+  if (!var || !declaration_declarators)
+    return NULL_TREE;
+  tree *group = declaration_declarators->get (var);
+  if (!group)
+    return NULL_TREE;
+  for (tree v : tree_vec_range (*group))
+    if (!v)
+      return NULL_TREE;
+  return *group;
+}
+
 /* The object that CALL constructs if it is a call of a constructor, as in
    `C::C (&b, x)`, otherwise NULL_TREE.  For a class returned by invisible
    reference, the object is the RESULT_DECL itself.  */
@@ -3587,6 +3669,7 @@ split_initialization_p (tree stmt)
 static tree eval_is_statement (tree);
 static tree eval_is_return_statement (tree);
 static tree eval_is_declaration_statement (tree);
+static tree declared_var_of_stmt (tree);
 
 /* Append STMT, a statement of a block, to ELTS the way statements_of
    reports it.  */
@@ -3647,6 +3730,16 @@ append_block_statement (location_t loc, tree stmt,
       && VAR_P (TREE_OPERAND (init, 0))
       && !DECL_ARTIFICIAL (TREE_OPERAND (init, 0)))
     return;
+
+  /* The declaration of a variable other than the first of a declaration
+     with several declarators is part of the first's.  */
+  if (eval_is_declaration_statement (stmt) == boolean_true_node)
+    {
+      tree var = declared_var_of_stmt (stmt);
+      if (tree group = declaration_group (var))
+	if (TREE_VEC_ELT (group, 0) != var)
+	  return;
+    }
 
   if (eval_is_declaration_statement (stmt) != boolean_true_node
       && eval_is_return_statement (stmt) != boolean_true_node)
@@ -4084,7 +4177,14 @@ eval_declared_variable_of (location_t loc, const constexpr_ctx *ctx, tree r,
 {
   if (eval_is_simple_declaration (r) == boolean_true_node)
     if (tree decl = declared_var_of_stmt (r))
-      return get_reflection_raw (loc, decl, REFLECT_UNDEF);
+      {
+	if (declaration_group (decl))
+	  return throw_exception (loc, ctx,
+				  "reflection represents a declaration of "
+				  "more than one variable",
+				  fun, non_constant_p, jump_target);
+	return get_reflection_raw (loc, decl, REFLECT_UNDEF);
+      }
 
   return throw_exception (loc, ctx, "reflection does not represent a declaration statement",
 			  fun, non_constant_p, jump_target);
@@ -4101,8 +4201,13 @@ eval_declarators_of (location_t loc, const constexpr_ctx *ctx, tree r,
 
   tree decl = declared_var_of_stmt (r);
   vec<constructor_elt, va_gc> *elts = nullptr;
-  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-			  get_reflection_raw (loc, decl, REFLECT_UNDEF));
+  if (tree group = declaration_group (decl))
+    for (tree var : tree_vec_range (group))
+      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+			      get_reflection_raw (loc, var, REFLECT_UNDEF));
+  else
+    CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+			    get_reflection_raw (loc, decl, REFLECT_UNDEF));
   return get_vector_of_info_elts (elts);
 }
 
@@ -4275,6 +4380,11 @@ eval_initializer_of (location_t loc, const constexpr_ctx *ctx, tree r,
     return throw_exception (loc, ctx,
 			    "reflection does not represent a variable "
 			    "declaration", fun, non_constant_p, jump_target);
+  if (!VAR_P (r) && declaration_group (declared_var_of_stmt (r)))
+    return throw_exception (loc, ctx,
+			    "reflection represents a declaration of more "
+			    "than one variable", fun, non_constant_p,
+			    jump_target);
 
   tree init = extract_var_initializer (r);
   if (init)
@@ -4291,11 +4401,18 @@ eval_initializers_of (location_t loc, const constexpr_ctx *ctx, tree r,
 			    "reflection does not represent a simple "
 			    "declaration", fun, non_constant_p, jump_target);
 
-  tree init = extract_var_initializer (r);
-  tree refl = init ? get_reflection_raw_expression (loc, init)
-		   : get_null_reflection ();
   vec<constructor_elt, va_gc> *elts = nullptr;
-  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE, refl);
+  auto append = [&] (tree init)
+    {
+      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+			      init ? get_reflection_raw_expression (loc, init)
+				   : get_null_reflection ());
+    };
+  if (tree group = declaration_group (declared_var_of_stmt (r)))
+    for (tree var : tree_vec_range (group))
+      append (extract_var_initializer (var));
+  else
+    append (extract_var_initializer (r));
   return get_vector_of_info_elts (elts);
 }
 
