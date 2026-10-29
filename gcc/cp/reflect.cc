@@ -11556,6 +11556,28 @@ reflection_mangle_prefix (tree refl, char prefix[3])
       strcpy (prefix, "de");
       return h;
     }
+  /* A statement has no mangling, so its reflection can't be a template
+     argument; clang gives the same error.  These checks come last so that
+     no reflection of an entity reaches them.  */
+  if (eval_is_statement (h) == boolean_true_node)
+    {
+      error ("a reflection of a statement cannot be used as a template "
+	     "argument");
+      /* Not "nu": a template parameter object is found by its mangled name,
+	 so an S{stmt} must not mangle like an S{expr} or an S{info{}}.  */
+      strcpy (prefix, "st");
+      return NULL_TREE;
+    }
+  /* A mangling must agree with reflection equality, and whether two
+     reflections of equal expressions at different places are equal is
+     unsettled: clang says no, but compare_reflections uses cp_tree_equal.  */
+  if (eval_is_expression (h) == boolean_true_node)
+    {
+      sorry ("mangling a reflection of an expression that is not an "
+	     "id-expression");
+      strcpy (prefix, "ex");
+      return NULL_TREE;
+    }
   gcc_unreachable ();
 }
 
