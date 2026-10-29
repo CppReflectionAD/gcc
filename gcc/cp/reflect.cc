@@ -4202,10 +4202,13 @@ eval_is_declaration_statement (tree r)
      assignment, `a = e;` or `a += e;`, which is an expression statement.  */
   if (r && TREE_CODE (r) == INIT_EXPR)
     return boolean_true_node;
+  /* A structured binding declaration declares the unnamed variable that
+     holds its initializer, and gives each name a DECL_VALUE_EXPR on it.  */
   if (r && TREE_CODE (r) == DECL_EXPR)
     {
       tree var = DECL_EXPR_DECL (r);
-      if (var && VAR_P (var) && !DECL_ARTIFICIAL (var))
+      if (var && VAR_P (var)
+	  && (!DECL_ARTIFICIAL (var) || DECL_DECOMPOSITION_P (var)))
 	return boolean_true_node;
     }
   return boolean_false_node;
@@ -4259,14 +4262,22 @@ eval_declared_variable_of (location_t loc, const constexpr_ctx *ctx, tree r,
 			  fun, non_constant_p, jump_target);
 }
 
+/* Process std::meta::declarators_of.
+   Returns: The variables that R, a declaration statement, declares, or none
+   if it isn't a simple declaration: a structured binding's names share one
+   initializer, so they aren't declarators.
+   Throws: meta::exception unless R represents a declaration statement.  */
+
 static tree
 eval_declarators_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		     bool *non_constant_p, tree *jump_target, tree fun)
 {
-  if (eval_is_simple_declaration (r) != boolean_true_node)
+  if (eval_is_declaration_statement (r) != boolean_true_node)
     return throw_exception (loc, ctx,
-			    "reflection does not represent a simple "
-			    "declaration", fun, non_constant_p, jump_target);
+			    "reflection does not represent a declaration "
+			    "statement", fun, non_constant_p, jump_target);
+  if (eval_is_simple_declaration (r) != boolean_true_node)
+    return get_vector_of_info_elts (nullptr);
 
   tree decl = declared_var_of_stmt (r);
   vec<constructor_elt, va_gc> *elts = nullptr;
@@ -4461,14 +4472,21 @@ eval_initializer_of (location_t loc, const constexpr_ctx *ctx, tree r,
   return get_null_reflection ();
 }
 
+/* Process std::meta::initializers_of.
+   Returns: The initializers of the declarators_of R, in the same order, with
+   a null reflection for a declarator without one.
+   Throws: meta::exception unless R represents a declaration statement.  */
+
 static tree
 eval_initializers_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		      bool *non_constant_p, tree *jump_target, tree fun)
 {
-  if (eval_is_simple_declaration (r) != boolean_true_node)
+  if (eval_is_declaration_statement (r) != boolean_true_node)
     return throw_exception (loc, ctx,
-			    "reflection does not represent a simple "
-			    "declaration", fun, non_constant_p, jump_target);
+			    "reflection does not represent a declaration "
+			    "statement", fun, non_constant_p, jump_target);
+  if (eval_is_simple_declaration (r) != boolean_true_node)
+    return get_vector_of_info_elts (nullptr);
 
   vec<constructor_elt, va_gc> *elts = nullptr;
   auto append = [&] (tree init)
