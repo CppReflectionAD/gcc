@@ -18,7 +18,7 @@ double f_ptr (double x) { double r = *addr (&x); return r; }
 consteval info
 strip (info e)
 {
-  while (is_cast (e))
+  while (is_conversion (e))
     e = operands_of (e)[0];
   return e;
 }
@@ -31,19 +31,19 @@ init (info fn)
   return strip (initializer_of (declared_variable_of (s)));
 }
 
-// Argument I of call E, whose first operand is the callee.
+// Argument I of call E.
 consteval info
 arg (info e, int i)
 {
-  return operands_of (e)[1 + i];
+  return operands_of (e)[i];
 }
 
 static_assert (is_function_call (init (^^f_max)));
-static_assert (is_variable (strip (arg (init (^^f_max), 0))));
-static_assert (is_variable (strip (arg (init (^^f_max), 1))));
-static_assert (is_variable (strip (arg (init (^^f_take), 0))));
+static_assert (is_id_expression (strip (arg (init (^^f_max), 0))));
+static_assert (is_id_expression (strip (arg (init (^^f_max), 1))));
+static_assert (is_id_expression (strip (arg (init (^^f_take), 0))));
 
 // A `&` in the source is still a unary operator.
 static_assert (is_unary_operator (strip (arg (strip (operands_of (init (^^f_ptr))[0]), 0))));
-static_assert (operator_of (strip (arg (strip (operands_of (init (^^f_ptr))[0]), 0)))
+static_assert (expression_operator_of (strip (arg (strip (operands_of (init (^^f_ptr))[0]), 0)))
 	       == operators::op_ampersand);

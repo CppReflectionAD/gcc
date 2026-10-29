@@ -1966,7 +1966,9 @@ enum reflect_kind : addr_space_t {
   /* The reflection represents a direct base relationship.  */
   REFLECT_BASE,
   /* The reflection represents an annotation.  */
-  REFLECT_ANNOTATION
+  REFLECT_ANNOTATION,
+  /* The reflection represents an identifier expression.  */
+  REFLECT_ID_EXPR
 };
 
 /* The reflect_kind of a REFLECT_EXPR.  */
@@ -7826,6 +7828,7 @@ extern const char *expr_as_string		(tree, int);
 extern const char *expr_to_string		(tree);
 extern const char *lang_decl_name		(tree, int, bool);
 extern const char *lang_decl_dwarf_name		(tree, int, bool);
+extern tree resolve_virtual_fun_from_obj_type_ref (tree);
 extern const char *language_to_string		(enum languages);
 extern const char *class_key_or_enum_as_string	(tree);
 extern void maybe_warn_variadic_templates       (void);

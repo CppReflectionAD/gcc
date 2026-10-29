@@ -4236,7 +4236,8 @@ write_expression (tree expr)
 		  ::= ba [ <nonnegative number> ] _ <type> # dir. base cls rel
 		  ::= ds <type> _ [ <unqualified-name> ] _
 		      [ <alignment number> ] _ [ <bit-width number> ] _
-		      [ n ] [ <template-arg>* ]		# data member spec  */
+		      [ n ] [ <template-arg>* ]		# data member spec
+		  ::= id <reflection>			# id-expression  */
 
 static void
 write_reflection (tree refl)
@@ -4252,7 +4253,9 @@ write_reflection (tree refl)
   /* If there is no argument, nothing further needs to be mangled.  */
   if (arg == NULL_TREE)
     return;
-  if (strcmp (prefix, "vl") == 0 || strcmp (prefix, "ob") == 0)
+  if (strcmp (prefix, "id") == 0)
+    write_reflection (arg);
+  else if (strcmp (prefix, "vl") == 0 || strcmp (prefix, "ob") == 0)
     write_expression (arg);
   else if (strcmp (prefix, "vr") == 0 || strcmp (prefix, "sb") == 0)
     write_name (arg);
