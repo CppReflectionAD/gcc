@@ -43,6 +43,10 @@ consteval void collect_all_expressions(info node, std::vector<fixed_string>& res
     }
     return;
   }
+  if (is_return_statement(node)) {
+    collect_all_expressions(return_operand_of(node), res);
+    return;
+  }
   if (is_statement(node)) {
     for (info child : statements_of(node)) {
       collect_all_expressions(child, res);
@@ -55,19 +59,15 @@ consteval bool run_test() {
   std::vector<fixed_string> res;
   collect_all_expressions(body, res);
 
-  if (res.size() != 12) return false;
-  if (res[0] != "<cleanup_point_expr>") return false;
-  if (res[1] != "<return_expr>") return false;
-  if (res[2] != "<init_expr>") return false;
-  if (res[3] != "<result_decl>") return false;
-  if (res[4] != "<plus_expr>") return false;
-  if (res[5] != "<plus_expr>") return false;
-  if (res[6] != "<call_expr>") return false;
-  if (res[7] != "<negate_expr>") return false;
-  if (res[8] != "<non_lvalue_expr>") return false;
-  if (res[9] != "x") return false;
-  if (res[10] != "1.0e+0f") return false;
-  if (res[11] != "1.0e+0f") return false;
+  if (res.size() != 8) return false;
+  if (res[0] != "<plus_expr>") return false;
+  if (res[1] != "<plus_expr>") return false;
+  if (res[2] != "<call_expr>") return false;
+  if (res[3] != "<negate_expr>") return false;
+  if (res[4] != "<non_lvalue_expr>") return false;
+  if (res[5] != "x") return false;
+  if (res[6] != "1.0e+0f") return false;
+  if (res[7] != "1.0e+0f") return false;
 
   return true;
 }

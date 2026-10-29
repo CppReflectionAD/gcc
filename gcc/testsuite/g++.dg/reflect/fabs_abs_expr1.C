@@ -38,7 +38,7 @@ calls (info fn, std::string_view name)
   info e = init (fn);
   return (is_function_call (e)
 	  && !is_unary_operator (e)
-	  && identifier_of (callee_of (e)) == name);
+	  && identifier_of (declaration_of (callee_of (e))) == name);
 }
 
 static_assert (calls (^^f_fabs, "fabs"));
