@@ -18434,7 +18434,18 @@ cp_parser_simple_declaration (cp_parser* parser,
 	       called via cp_parser_decl_specifier_seq, returns a class or
 	       an enumeration (c++/51786).  */
 	    decl_specifiers.type = NULL_TREE;
-	  shadow_tag (&decl_specifiers);
+	  tree type = shadow_tag (&decl_specifiers);
+	  /* Under -freflection, a declaration of a local class or
+	     enumeration with no declarators is a declaration statement.  */
+	  if (flag_reflection
+	      && type
+	      && declares_class_or_enum
+	      && at_function_scope_p ()
+	      && OVERLOAD_TYPE_P (type)
+	      && !ANON_AGGR_TYPE_P (type)
+	      && !LAMBDA_TYPE_P (type))
+	    add_stmt (reflection_declaration_marker
+		      (DECL_SOURCE_LOCATION (TYPE_MAIN_DECL (type))));
 	}
       /* Perform any deferred access checks.  */
       perform_deferred_access_checks (tf_warning_or_error);
@@ -24833,6 +24844,7 @@ cp_parser_using_declaration (cp_parser* parser,
   tree qscope;
   int oldcount = errorcount;
   cp_token *diag_token = NULL;
+  location_t start = cp_lexer_peek_token (parser->lexer)->location;
 
   if (access_declaration_p)
     {
@@ -24993,6 +25005,12 @@ cp_parser_using_declaration (cp_parser* parser,
   /* Look for the final `;'.  */
   cp_parser_require (parser, CPP_SEMICOLON, RT_SEMICOLON);
 
+  /* Under -freflection, a using-declaration at block scope is one
+     declaration statement, however many declarators it has.  */
+  if (flag_reflection && !access_declaration_p && at_function_scope_p ())
+    add_stmt (reflection_declaration_marker
+	      (make_location (start, start, input_location)));
+
   if (access_declaration_p && errorcount == oldcount)
     warning_at (diag_token->location, OPT_Wdeprecated,
 		"access declarations are deprecated "
@@ -25068,8 +25086,15 @@ cp_parser_using_enum (cp_parser *parser)
   /* A using-enum-declaration introduces the enumerator names of the named
      enumeration as if by a using-declaration for each enumerator.  */
   if (TREE_CODE (type) == ENUMERAL_TYPE)
-    for (tree v = TYPE_VALUES (type); v; v = TREE_CHAIN (v))
-      finish_using_decl (type, DECL_NAME (TREE_VALUE (v)));
+    {
+      for (tree v = TYPE_VALUES (type); v; v = TREE_CHAIN (v))
+	finish_using_decl (type, DECL_NAME (TREE_VALUE (v)));
+      /* Under -freflection, one at block scope is one declaration
+	 statement.  */
+      if (flag_reflection && at_function_scope_p ())
+	add_stmt (reflection_declaration_marker
+		  (make_location (start, start, end)));
+    }
 }
 
 /* Parse an alias-declaration.
@@ -25231,6 +25256,7 @@ cp_parser_using_directive (cp_parser* parser)
       return;
     }
 
+  location_t start = cp_lexer_peek_token (parser->lexer)->location;
   /* Look for the `using' keyword.  */
   cp_parser_require_keyword (parser, RID_USING, RT_USING);
   /* And the `namespace' keyword.  */
@@ -25260,6 +25286,12 @@ cp_parser_using_directive (cp_parser* parser)
 
   /* Look for the final `;'.  */
   cp_parser_require (parser, CPP_SEMICOLON, RT_SEMICOLON);
+
+  /* Under -freflection, a using-directive at block scope is a
+     declaration statement.  */
+  if (flag_reflection && at_function_scope_p ())
+    add_stmt (reflection_declaration_marker
+	      (make_location (start, start, input_location)));
 }
 
 /* Parse a string literal or constant expression yielding a string.

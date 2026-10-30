@@ -3443,13 +3443,26 @@ eh_cleanup_p (tree handler)
      declaration of the named return value, when it has no DECL_INITIAL;
    - the call that cp_maybe_instrument_return appends to a function that
      doesn't obviously end with a return, such as one ending in a named
-     return value's TRY_CATCH_EXPR.
+     return value's TRY_CATCH_EXPR;
+   - the DECL_EXPR that finish_nonmember_using_decl adds for each
+     using-declarator at block scope, and for each enumerator of a
+     using-enum-declaration, whose statement is the marker after them.
+     add_decl_expr wraps it in a CLEANUP_POINT_EXPR, because a USING_DECL
+     keeps its USING_DECL_DECLS in DECL_INITIAL, and cp_genericize_r leaves
+     an empty statement in that in place of the DECL_EXPR.
    A statement in the source is wrapped in an EXPR_STMT or a
-   CLEANUP_POINT_EXPR, so none of these bare trees can be one.  */
+   CLEANUP_POINT_EXPR, so none of the other bare trees can be one.  */
 
 static bool
 added_statement_p (tree stmt)
 {
+  if (TREE_CODE (stmt) == CLEANUP_POINT_EXPR)
+    {
+      tree e = TREE_OPERAND (stmt, 0);
+      return (IS_EMPTY_STMT (e)
+	      || (TREE_CODE (e) == DECL_EXPR
+		  && TREE_CODE (DECL_EXPR_DECL (e)) == USING_DECL));
+    }
   if (TREE_CODE (stmt) == DECL_EXPR)
     {
       tree d = DECL_EXPR_DECL (stmt);
@@ -3565,6 +3578,39 @@ reflection_record_static_init (tree var, tree guard, tree init)
   if (!static_init_guards)
     static_init_guards = decl_tree_map::create_ggc (16);
   static_init_guards->put (guard, var);
+}
+
+/* A block declaration that declares no variable, as in `using T = double;'
+   or `struct L { double v; };', is a declaration statement, but nothing
+   that GCC keeps for it reaches the genericized body as one.  Under
+   -freflection, each is given a DECL_EXPR of a marker, an artificial
+   TYPE_DECL of void with no name, which declares nothing and which no scope
+   binds.  A marker is known by its shape alone, so a copy of the body, an
+   instantiation, or a module keeps it one.  */
+
+/* Return a DECL_EXPR of a new marker at LOC.  */
+
+tree
+reflection_declaration_marker (location_t loc)
+{
+  tree marker = build_decl (loc, TYPE_DECL, NULL_TREE, void_type_node);
+  DECL_ARTIFICIAL (marker) = 1;
+  DECL_IGNORED_P (marker) = 1;
+  DECL_CONTEXT (marker) = current_function_decl;
+  return build_stmt (loc, DECL_EXPR, marker);
+}
+
+/* Whether DECL is a marker: a typedef of void would have a name and an
+   original type.  */
+
+bool
+reflection_declaration_marker_p (tree decl)
+{
+  return (TREE_CODE (decl) == TYPE_DECL
+	  && !DECL_NAME (decl)
+	  && DECL_ARTIFICIAL (decl)
+	  && TREE_TYPE (decl) == void_type_node
+	  && !DECL_ORIGINAL_TYPE (decl));
 }
 
 /* A declaration with several declarators, as in `double a = x, b = a * a;`,
@@ -4202,10 +4248,17 @@ eval_is_declaration_statement (tree r)
      assignment, `a = e;` or `a += e;`, which is an expression statement.  */
   if (r && TREE_CODE (r) == INIT_EXPR)
     return boolean_true_node;
+  /* A structured binding declaration declares the unnamed variable that
+     holds its initializer, and gives each name a DECL_VALUE_EXPR on it.
+     Under -freflection, a block declaration that declares no variable
+     has a marker.  */
   if (r && TREE_CODE (r) == DECL_EXPR)
     {
       tree var = DECL_EXPR_DECL (r);
-      if (var && VAR_P (var) && !DECL_ARTIFICIAL (var))
+      if (var && VAR_P (var)
+	  && (!DECL_ARTIFICIAL (var) || DECL_DECOMPOSITION_P (var)))
+	return boolean_true_node;
+      if (var && reflection_declaration_marker_p (var))
 	return boolean_true_node;
     }
   return boolean_false_node;
@@ -4259,14 +4312,22 @@ eval_declared_variable_of (location_t loc, const constexpr_ctx *ctx, tree r,
 			  fun, non_constant_p, jump_target);
 }
 
+/* Process std::meta::declarators_of.
+   Returns: The variables that R, a declaration statement, declares, or none
+   if it isn't a simple declaration: a structured binding's names share one
+   initializer, so they aren't declarators.
+   Throws: meta::exception unless R represents a declaration statement.  */
+
 static tree
 eval_declarators_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		     bool *non_constant_p, tree *jump_target, tree fun)
 {
-  if (eval_is_simple_declaration (r) != boolean_true_node)
+  if (eval_is_declaration_statement (r) != boolean_true_node)
     return throw_exception (loc, ctx,
-			    "reflection does not represent a simple "
-			    "declaration", fun, non_constant_p, jump_target);
+			    "reflection does not represent a declaration "
+			    "statement", fun, non_constant_p, jump_target);
+  if (eval_is_simple_declaration (r) != boolean_true_node)
+    return get_vector_of_info_elts (nullptr);
 
   tree decl = declared_var_of_stmt (r);
   vec<constructor_elt, va_gc> *elts = nullptr;
@@ -4461,14 +4522,21 @@ eval_initializer_of (location_t loc, const constexpr_ctx *ctx, tree r,
   return get_null_reflection ();
 }
 
+/* Process std::meta::initializers_of.
+   Returns: The initializers of the declarators_of R, in the same order, with
+   a null reflection for a declarator without one.
+   Throws: meta::exception unless R represents a declaration statement.  */
+
 static tree
 eval_initializers_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		      bool *non_constant_p, tree *jump_target, tree fun)
 {
-  if (eval_is_simple_declaration (r) != boolean_true_node)
+  if (eval_is_declaration_statement (r) != boolean_true_node)
     return throw_exception (loc, ctx,
-			    "reflection does not represent a simple "
-			    "declaration", fun, non_constant_p, jump_target);
+			    "reflection does not represent a declaration "
+			    "statement", fun, non_constant_p, jump_target);
+  if (eval_is_simple_declaration (r) != boolean_true_node)
+    return get_vector_of_info_elts (nullptr);
 
   vec<constructor_elt, va_gc> *elts = nullptr;
   auto append = [&] (tree init)
