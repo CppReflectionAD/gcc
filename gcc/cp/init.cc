@@ -2273,6 +2273,9 @@ expand_default_init (tree binfo, tree true_exp, tree exp, tree init, int flags,
 	}
     }
 
+  if (flag_reflection && exp == true_exp && TREE_CODE (rval) == CALL_EXPR)
+    reflection_record_constructor_init (exp, rval);
+
   /* FIXME put back convert_to_void?  */
   if (TREE_SIDE_EFFECTS (rval))
     finish_expr_stmt (rval);

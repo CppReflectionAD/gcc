@@ -3499,13 +3499,60 @@ reflection_split_nonconstant_init (tree dest, tree init)
   return code;
 }
 
+/* A local of class type that a constructor initializes, as in `C b (x);`
+   or `C b{x};`, is split the same way: expand_default_init declares it
+   without an initializer and calls the constructor on it in a statement
+   after the declaration.  Under -freflection, keep the initialization as
+   the construct that `C b = x;` has for its initializer.  VAR is the
+   variable and CALL the call of its constructor.  */
+
+void
+reflection_record_constructor_init (tree var, tree call)
+{
+  if (processing_template_decl
+      || !VAR_P (var) || DECL_ARTIFICIAL (var) || TREE_STATIC (var)
+      || !DECL_FUNCTION_SCOPE_P (var))
+    return;
+  tree fn = get_callee_fndecl (call);
+  if (!fn || !DECL_CONSTRUCTOR_P (fn))
+    return;
+  /* CALL is folded and genericized in place.  */
+  tree init = build_aggr_init_expr (TREE_TYPE (var), unshare_expr (call));
+  AGGR_INIT_EXPR_SLOT (init) = var;
+  if (!split_initializers)
+    split_initializers = decl_tree_map::create_ggc (16);
+  split_initializers->put (var, init);
+}
+
+/* The object that CALL constructs if it is a call of a constructor, as in
+   `C::C (&b, x)`, otherwise NULL_TREE.  For a class returned by invisible
+   reference, the object is the RESULT_DECL itself.  */
+
+static tree
+constructed_object (tree call)
+{
+  if (!call || TREE_CODE (call) != CALL_EXPR || call_expr_nargs (call) == 0)
+    return NULL_TREE;
+  tree fn = get_callee_fndecl (call);
+  if (!fn || !DECL_CONSTRUCTOR_P (fn))
+    return NULL_TREE;
+  tree obj = CALL_EXPR_ARG (call, 0);
+  STRIP_NOPS (obj);
+  if (TREE_CODE (obj) == ADDR_EXPR)
+    return TREE_OPERAND (obj, 0);
+  if (TREE_CODE (obj) == RESULT_DECL)
+    return obj;
+  return NULL_TREE;
+}
+
 /* True if STMT is the split initialization of a variable: part of the
    variable's declaration, not a statement of its own.  It is one
    initialization of a subobject of the variable, or a list of them, along
-   with the flags that build_disable_temp_cleanup adds, that starts with one.
-   The source can't initialize a subobject of a declared variable, only
-   assign to it, which is a MODIFY_EXPR.  Look at the trees rather than
-   remember the statement: a reflection of a block can be a copy.  */
+   with the flags that build_disable_temp_cleanup adds, that starts with one,
+   or the call of the variable's constructor.  The source can't initialize a
+   subobject of a declared variable, only assign to it, which is a
+   MODIFY_EXPR, and it can't call a constructor.  Look at the trees rather
+   than remember the statement: a reflection of a block can be a copy.  */
 
 static bool
 split_initialization_p (tree stmt)
@@ -3525,6 +3572,8 @@ split_initialization_p (tree stmt)
       else
 	stmt = tsi_stmt (tsi_start (stmt));
     }
+  if (tree obj = constructed_object (stmt))
+    return VAR_P (obj) && split_initializers->get (obj);
   if (!stmt || TREE_CODE (stmt) != INIT_EXPR)
     return false;
   tree sub = TREE_OPERAND (stmt, 0);
@@ -3924,16 +3973,27 @@ nrv_variable (tree t)
   return NULL_TREE;
 }
 
-/* True if R is the initialization of a named return value: an INIT_EXPR of
-   the return slot that is a statement of its own, not part of a return
-   statement.  */
+/* The variable of a named return value if R is its initialization, otherwise
+   NULL_TREE.  That is an INIT_EXPR of the return slot that is a statement of
+   its own, not part of a return statement, or, for a variable that a
+   constructor initializes, the call of the constructor on the return slot,
+   which finalize_nrv leaves in place of the variable's declaration.  */
+
+static tree
+nrv_init_variable (tree r)
+{
+  if (r && TREE_CODE (r) == INIT_EXPR && TREE_OPERAND_LENGTH (r) > 0)
+    return nrv_variable (TREE_OPERAND (r, 0));
+  tree var = nrv_variable (constructed_object (r));
+  if (var && split_initializers && split_initializers->get (var))
+    return var;
+  return NULL_TREE;
+}
 
 static bool
 nrv_init_p (tree r)
 {
-  return (r && TREE_CODE (r) == INIT_EXPR
-	  && TREE_OPERAND_LENGTH (r) > 0
-	  && nrv_variable (TREE_OPERAND (r, 0)));
+  return nrv_init_variable (r) != NULL_TREE;
 }
 
 static tree
@@ -4001,7 +4061,7 @@ declared_var_of_stmt (tree r)
   if (TREE_CODE (r) == DECL_EXPR)
     decl = DECL_EXPR_DECL (r);
   else if (nrv_init_p (r))
-    decl = nrv_variable (TREE_OPERAND (r, 0));
+    decl = nrv_init_variable (r);
   else if (TREE_CODE (r) == INIT_EXPR && TREE_OPERAND_LENGTH (r) > 0)
     decl = TREE_OPERAND (r, 0);
   if (decl && VAR_P (decl) && !DECL_ARTIFICIAL (decl))
@@ -4187,6 +4247,8 @@ extract_var_initializer (tree r)
 	init = TREE_OPERAND (u, 1);
       else if (u && TREE_CODE (u) == DECL_EXPR)
 	init = find_var_initializer_in_scope (DECL_EXPR_DECL (u));
+      else if (tree var = nrv_init_variable (u))
+	init = find_var_initializer_in_scope (var);
     }
   while (init && (TREE_CODE (init) == CLEANUP_POINT_EXPR
 		  || TREE_CODE (init) == EXPR_STMT
