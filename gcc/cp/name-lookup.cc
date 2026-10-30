@@ -6920,6 +6920,11 @@ do_namespace_alias (location_t loc, tree alias, tree name_space)
   set_originating_module (alias);
   check_module_decl_linkage (alias);
 
+  /* Under -freflection, a namespace alias at block scope is a declaration
+     statement.  In a template, tsubst_stmt copies the pattern's marker.  */
+  if (flag_reflection && at_function_scope_p ())
+    add_stmt (reflection_declaration_marker (loc));
+
   /* Emit debug info for namespace alias.  */
   if (!building_stmt_list_p ())
     (*debug_hooks->early_global_decl) (alias);

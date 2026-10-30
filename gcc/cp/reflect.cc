@@ -3443,13 +3443,26 @@ eh_cleanup_p (tree handler)
      declaration of the named return value, when it has no DECL_INITIAL;
    - the call that cp_maybe_instrument_return appends to a function that
      doesn't obviously end with a return, such as one ending in a named
-     return value's TRY_CATCH_EXPR.
+     return value's TRY_CATCH_EXPR;
+   - the DECL_EXPR that finish_nonmember_using_decl adds for each
+     using-declarator at block scope, and for each enumerator of a
+     using-enum-declaration, whose statement is the marker after them.
+     add_decl_expr wraps it in a CLEANUP_POINT_EXPR, because a USING_DECL
+     keeps its USING_DECL_DECLS in DECL_INITIAL, and cp_genericize_r leaves
+     an empty statement in that in place of the DECL_EXPR.
    A statement in the source is wrapped in an EXPR_STMT or a
-   CLEANUP_POINT_EXPR, so none of these bare trees can be one.  */
+   CLEANUP_POINT_EXPR, so none of the other bare trees can be one.  */
 
 static bool
 added_statement_p (tree stmt)
 {
+  if (TREE_CODE (stmt) == CLEANUP_POINT_EXPR)
+    {
+      tree e = TREE_OPERAND (stmt, 0);
+      return (IS_EMPTY_STMT (e)
+	      || (TREE_CODE (e) == DECL_EXPR
+		  && TREE_CODE (DECL_EXPR_DECL (e)) == USING_DECL));
+    }
   if (TREE_CODE (stmt) == DECL_EXPR)
     {
       tree d = DECL_EXPR_DECL (stmt);

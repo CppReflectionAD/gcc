@@ -24844,6 +24844,7 @@ cp_parser_using_declaration (cp_parser* parser,
   tree qscope;
   int oldcount = errorcount;
   cp_token *diag_token = NULL;
+  location_t start = cp_lexer_peek_token (parser->lexer)->location;
 
   if (access_declaration_p)
     {
@@ -25004,6 +25005,12 @@ cp_parser_using_declaration (cp_parser* parser,
   /* Look for the final `;'.  */
   cp_parser_require (parser, CPP_SEMICOLON, RT_SEMICOLON);
 
+  /* Under -freflection, a using-declaration at block scope is one
+     declaration statement, however many declarators it has.  */
+  if (flag_reflection && !access_declaration_p && at_function_scope_p ())
+    add_stmt (reflection_declaration_marker
+	      (make_location (start, start, input_location)));
+
   if (access_declaration_p && errorcount == oldcount)
     warning_at (diag_token->location, OPT_Wdeprecated,
 		"access declarations are deprecated "
@@ -25079,8 +25086,15 @@ cp_parser_using_enum (cp_parser *parser)
   /* A using-enum-declaration introduces the enumerator names of the named
      enumeration as if by a using-declaration for each enumerator.  */
   if (TREE_CODE (type) == ENUMERAL_TYPE)
-    for (tree v = TYPE_VALUES (type); v; v = TREE_CHAIN (v))
-      finish_using_decl (type, DECL_NAME (TREE_VALUE (v)));
+    {
+      for (tree v = TYPE_VALUES (type); v; v = TREE_CHAIN (v))
+	finish_using_decl (type, DECL_NAME (TREE_VALUE (v)));
+      /* Under -freflection, one at block scope is one declaration
+	 statement.  */
+      if (flag_reflection && at_function_scope_p ())
+	add_stmt (reflection_declaration_marker
+		  (make_location (start, start, end)));
+    }
 }
 
 /* Parse an alias-declaration.
@@ -25242,6 +25256,7 @@ cp_parser_using_directive (cp_parser* parser)
       return;
     }
 
+  location_t start = cp_lexer_peek_token (parser->lexer)->location;
   /* Look for the `using' keyword.  */
   cp_parser_require_keyword (parser, RID_USING, RT_USING);
   /* And the `namespace' keyword.  */
@@ -25271,6 +25286,12 @@ cp_parser_using_directive (cp_parser* parser)
 
   /* Look for the final `;'.  */
   cp_parser_require (parser, CPP_SEMICOLON, RT_SEMICOLON);
+
+  /* Under -freflection, a using-directive at block scope is a
+     declaration statement.  */
+  if (flag_reflection && at_function_scope_p ())
+    add_stmt (reflection_declaration_marker
+	      (make_location (start, start, input_location)));
 }
 
 /* Parse a string literal or constant expression yielding a string.
