@@ -3781,6 +3781,88 @@ split_initialization_p (tree stmt)
   return VAR_P (sub) && split_initializers->get (sub);
 }
 
+/* The tables above are keyed by the variables of a body, and a module
+   importer reads a body's variables as new trees, so a module streams the
+   entries for them with the body.  */
+
+struct body_tables
+{
+  hash_set<tree> groups_seen;
+  vec<tree> *groups;
+  vec<tree> *inits;
+  vec<tree> *guards;
+};
+
+/* walk_tree callback for reflection_body_tables.  */
+
+static tree
+find_body_table_entries (tree *tp, int *walk_subtrees, void *data)
+{
+  if (TYPE_P (*tp))
+    *walk_subtrees = 0;
+  if (!VAR_P (*tp))
+    return NULL_TREE;
+  body_tables *t = (body_tables *) data;
+  if (tree group = declaration_group (*tp))
+    if (!t->groups_seen.add (group))
+      t->groups->safe_push (group);
+  if (split_initializers)
+    if (tree *init = split_initializers->get (*tp))
+      {
+	t->inits->safe_push (*tp);
+	t->inits->safe_push (*init);
+      }
+  if (static_init_guards)
+    if (tree *var = static_init_guards->get (*tp))
+      {
+	t->guards->safe_push (*tp);
+	t->guards->safe_push (*var);
+      }
+  return NULL_TREE;
+}
+
+/* Append to GROUPS the variables of each declaration in BODY with more than
+   one declarator, as a TREE_VEC, to INITS each variable of BODY with a split
+   initialization followed by its initializer as written, and to GUARDS the
+   guard variable of each static local of BODY with a dynamic initializer
+   followed by the static local, in the order a walk of BODY finds them.  */
+
+void
+reflection_body_tables (tree body, vec<tree> &groups, vec<tree> &inits,
+			vec<tree> &guards)
+{
+  if (!declaration_declarators && !split_initializers)
+    return;
+  body_tables t;
+  t.groups = &groups;
+  t.inits = &inits;
+  t.guards = &guards;
+  cp_walk_tree_without_duplicates (&body, find_body_table_entries, &t);
+}
+
+/* Record the entries that reflection_body_tables found for a body that a
+   module importer installs.  */
+
+void
+reflection_install_body_tables (const vec<tree> &groups,
+				const vec<tree> &inits,
+				const vec<tree> &guards)
+{
+  if (!groups.is_empty () && !declaration_declarators)
+    declaration_declarators = decl_tree_map::create_ggc (16);
+  for (tree group : groups)
+    for (tree var : tree_vec_range (group))
+      declaration_declarators->put (var, group);
+  if (!inits.is_empty () && !split_initializers)
+    split_initializers = decl_tree_map::create_ggc (16);
+  for (unsigned i = 0; i + 1 < inits.length (); i += 2)
+    split_initializers->put (inits[i], inits[i + 1]);
+  if (!guards.is_empty () && !static_init_guards)
+    static_init_guards = decl_tree_map::create_ggc (16);
+  for (unsigned i = 0; i + 1 < guards.length (); i += 2)
+    static_init_guards->put (guards[i], guards[i + 1]);
+}
+
 static tree eval_is_statement (tree);
 static tree eval_is_return_statement (tree);
 static tree eval_is_declaration_statement (tree);
