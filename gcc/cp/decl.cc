@@ -10008,6 +10008,16 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
 
       rest_of_decl_compilation (decl, DECL_FILE_SCOPE_P (decl),
 				at_eof);
+
+      /* Under -freflection, a typedef or alias-declaration at block scope
+	 is a declaration statement.  A template's instantiation gets its
+	 marker here.  */
+      if (flag_reflection
+	  && !processing_template_decl
+	  && at_function_scope_p ()
+	  && DECL_NAME (decl)
+	  && !DECL_ARTIFICIAL (decl))
+	add_stmt (reflection_declaration_marker (DECL_SOURCE_LOCATION (decl)));
       return;
     }
 

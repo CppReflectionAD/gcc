@@ -18434,7 +18434,18 @@ cp_parser_simple_declaration (cp_parser* parser,
 	       called via cp_parser_decl_specifier_seq, returns a class or
 	       an enumeration (c++/51786).  */
 	    decl_specifiers.type = NULL_TREE;
-	  shadow_tag (&decl_specifiers);
+	  tree type = shadow_tag (&decl_specifiers);
+	  /* Under -freflection, a declaration of a local class or
+	     enumeration with no declarators is a declaration statement.  */
+	  if (flag_reflection
+	      && type
+	      && declares_class_or_enum
+	      && at_function_scope_p ()
+	      && OVERLOAD_TYPE_P (type)
+	      && !ANON_AGGR_TYPE_P (type)
+	      && !LAMBDA_TYPE_P (type))
+	    add_stmt (reflection_declaration_marker
+		      (DECL_SOURCE_LOCATION (TYPE_MAIN_DECL (type))));
 	}
       /* Perform any deferred access checks.  */
       perform_deferred_access_checks (tf_warning_or_error);

@@ -3567,6 +3567,39 @@ reflection_record_static_init (tree var, tree guard, tree init)
   static_init_guards->put (guard, var);
 }
 
+/* A block declaration that declares no variable, as in `using T = double;'
+   or `struct L { double v; };', is a declaration statement, but nothing
+   that GCC keeps for it reaches the genericized body as one.  Under
+   -freflection, each is given a DECL_EXPR of a marker, an artificial
+   TYPE_DECL of void with no name, which declares nothing and which no scope
+   binds.  A marker is known by its shape alone, so a copy of the body, an
+   instantiation, or a module keeps it one.  */
+
+/* Return a DECL_EXPR of a new marker at LOC.  */
+
+tree
+reflection_declaration_marker (location_t loc)
+{
+  tree marker = build_decl (loc, TYPE_DECL, NULL_TREE, void_type_node);
+  DECL_ARTIFICIAL (marker) = 1;
+  DECL_IGNORED_P (marker) = 1;
+  DECL_CONTEXT (marker) = current_function_decl;
+  return build_stmt (loc, DECL_EXPR, marker);
+}
+
+/* Whether DECL is a marker: a typedef of void would have a name and an
+   original type.  */
+
+bool
+reflection_declaration_marker_p (tree decl)
+{
+  return (TREE_CODE (decl) == TYPE_DECL
+	  && !DECL_NAME (decl)
+	  && DECL_ARTIFICIAL (decl)
+	  && TREE_TYPE (decl) == void_type_node
+	  && !DECL_ORIGINAL_TYPE (decl));
+}
+
 /* A declaration with several declarators, as in `double a = x, b = a * a;`,
    is one declaration statement, but GCC declares each variable with a
    DECL_EXPR of its own, and nothing in the trees says which DECL_EXPRs came
@@ -4203,12 +4236,16 @@ eval_is_declaration_statement (tree r)
   if (r && TREE_CODE (r) == INIT_EXPR)
     return boolean_true_node;
   /* A structured binding declaration declares the unnamed variable that
-     holds its initializer, and gives each name a DECL_VALUE_EXPR on it.  */
+     holds its initializer, and gives each name a DECL_VALUE_EXPR on it.
+     Under -freflection, a block declaration that declares no variable
+     has a marker.  */
   if (r && TREE_CODE (r) == DECL_EXPR)
     {
       tree var = DECL_EXPR_DECL (r);
       if (var && VAR_P (var)
 	  && (!DECL_ARTIFICIAL (var) || DECL_DECOMPOSITION_P (var)))
+	return boolean_true_node;
+      if (var && reflection_declaration_marker_p (var))
 	return boolean_true_node;
     }
   return boolean_false_node;
