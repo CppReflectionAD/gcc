@@ -103,9 +103,10 @@ static_assert (is_literal (operands_of (c2)[2]));
 
 // 3: int m = 1 + max_ref (x, y); (call returning reference inside binary op)
 constexpr info add_m = initializers_of (statements_of (body_of (^^calls_body))[3])[0];
-constexpr info c3 = is_cast (operands_of (add_m)[0])
-		    ? operands_of (operands_of (add_m)[0])[0]
-		    : operands_of (add_m)[0];
+static_assert (is_literal (operands_of (add_m)[0]));
+constexpr info c3 = is_cast (operands_of (add_m)[1])
+		    ? operands_of (operands_of (add_m)[1])[0]
+		    : operands_of (add_m)[1];
 static_assert (is_function_call (c3));
 static_assert (!is_unary_operator (c3));
 static_assert (is_id_expression (callee_of (c3)));

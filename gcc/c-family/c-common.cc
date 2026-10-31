@@ -2250,6 +2250,13 @@ verify_tree (tree x, struct tlist **pbefore_sp, struct tlist **pno_sp,
 	goto sequenced_binary;
       goto do_default;
 
+    case TRUTH_NOT_EXPR:
+      /* Treat as unary: the C++ front end keeps `!' for -freflection,
+	 rather than inverting its operand.  */
+      x = TREE_OPERAND (x, 0);
+      writer = 0;
+      goto restart;
+
     case COMPONENT_REF:
       /* Treat as unary, the other operands aren't evaluated.  */
       x = TREE_OPERAND (x, 0);

@@ -7962,7 +7962,13 @@ cp_build_unary_op (enum tree_code code, tree xarg, bool noconvert,
 	{
 	  if (processing_template_decl)
 	    return build1_loc (location, TRUTH_NOT_EXPR, boolean_type_node, arg);
-	  val = invert_truthvalue_loc (location, arg);
+	  /* Under -freflection, keep `!' as written, as cp_fold_function
+	     does (see cp_fold_keeps_operator_p): `!(a || b)' isn't
+	     `!a && !b'.  */
+	  if (flag_reflection && !CONSTANT_CLASS_P (arg))
+	    val = build1_loc (location, TRUTH_NOT_EXPR, boolean_type_node, arg);
+	  else
+	    val = invert_truthvalue_loc (location, arg);
 	  if (obvalue_p (val))
 	    val = non_lvalue_loc (location, val);
 	  return val;
