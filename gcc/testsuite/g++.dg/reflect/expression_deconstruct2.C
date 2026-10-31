@@ -61,12 +61,12 @@ consteval bool run_test() {
 
   if (res.size() != 8) return false;
   if (res[0] != "<plus_expr>") return false;
-  if (res[1] != "<plus_expr>") return false;
-  if (res[2] != "<call_expr>") return false;
-  if (res[3] != "<negate_expr>") return false;
-  if (res[4] != "<non_lvalue_expr>") return false;
-  if (res[5] != "x") return false;
-  if (res[6] != "1.0e+0f") return false;
+  if (res[1] != "1.0e+0f") return false;
+  if (res[2] != "<plus_expr>") return false;
+  if (res[3] != "<call_expr>") return false;
+  if (res[4] != "<negate_expr>") return false;
+  if (res[5] != "<non_lvalue_expr>") return false;
+  if (res[6] != "x") return false;
   if (res[7] != "1.0e+0f") return false;
 
   return true;
