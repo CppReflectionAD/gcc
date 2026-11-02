@@ -116,8 +116,7 @@ static_assert (!is_simple_declaration (s_assign));
 
 // Multiple declarators (`int a = 1, b, c = a + x;`).
 // P4395 specifies that `int a = 1, b, c = a + x;` is a single simple-declaration
-// statement with 3 declarators and 3 initializers. In GCC, each declarator
-// currently produces a separate DECL_EXPR statement. Mark as XFAIL until implemented.
+// statement with 3 declarators and 3 initializers.
 consteval bool
 check_multi_declarator ()
 {
@@ -146,7 +145,7 @@ check_multi_declarator ()
     return false;
   return true;
 }
-static_assert (check_multi_declarator ()); // { dg-bogus "static assertion failed" "" { xfail *-*-* } }
+static_assert (check_multi_declarator ());
 
 // Cast in initializer is preserved.
 constexpr info s_cast = statements_of (body_of (^^cast_initializer))[0];

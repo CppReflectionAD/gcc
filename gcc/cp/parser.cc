@@ -18134,6 +18134,10 @@ cp_parser_simple_declaration (cp_parser* parser,
   bool saw_declarator;
   location_t comma_loc = UNKNOWN_LOCATION;
   location_t init_loc = UNKNOWN_LOCATION;
+  /* Under -freflection, the local variables that the declarators declare,
+     while each declarator declares one.  */
+  auto_vec<tree, 4> reflection_vars;
+  bool reflection_vars_p = flag_reflection;
 
   if (maybe_range_for_decl)
     *maybe_range_for_decl = NULL_TREE;
@@ -18299,6 +18303,15 @@ cp_parser_simple_declaration (cp_parser* parser,
       if (cp_parser_error_occurred (parser))
 	goto error_out;
 
+      if (reflection_vars_p)
+	{
+	  if (VAR_P (decl) && DECL_FUNCTION_SCOPE_P (decl)
+	      && !DECL_EXTERNAL (decl))
+	    reflection_vars.safe_push (decl);
+	  else
+	    reflection_vars_p = false;
+	}
+
       if (auto_specifier_p && cxx_dialect >= cxx14)
 	{
 	  /* If the init-declarator-list contains more than one
@@ -18403,6 +18416,9 @@ cp_parser_simple_declaration (cp_parser* parser,
 	 is not valid.  */
       function_definition_allowed_p = false;
     }
+
+  if (reflection_vars_p && reflection_vars.length () > 1)
+    reflection_record_declarators (reflection_vars);
 
   /* Issue an error message if no declarators are present, and the
      decl-specifier-seq does not itself declare a class or
