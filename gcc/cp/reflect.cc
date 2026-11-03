@@ -3524,6 +3524,49 @@ reflection_record_constructor_init (tree var, tree call)
   split_initializers->put (var, init);
 }
 
+/* A static local with a dynamic initializer is split too: expand_static_init
+   declares it without an initializer and initializes it in an `if' on its
+   guard variable, after the declaration.  Map each guard variable to its
+   static local.  */
+
+static GTY(()) decl_tree_map *static_init_guards;
+
+static tree constructed_object (tree);
+
+/* expand_static_init (VAR, INIT) under -freflection, where GUARD is VAR's
+   guard variable.  Keep the initializer as written, as for a local that
+   isn't static, and remember GUARD, so that statements_of can leave out the
+   `if' as part of the declaration.  */
+
+void
+reflection_record_static_init (tree var, tree guard, tree init)
+{
+  if (processing_template_decl
+      || !VAR_P (var) || DECL_ARTIFICIAL (var) || !init)
+    return;
+  if (!split_initializers)
+    split_initializers = decl_tree_map::create_ggc (16);
+  /* reflection_split_nonconstant_init has kept an aggregate's initializer,
+     and INIT is what's left of it.  */
+  if (!split_initializers->get (var))
+    {
+      tree whole;
+      if (constructed_object (init) == var)
+	{
+	  whole = build_aggr_init_expr (TREE_TYPE (var), unshare_expr (init));
+	  AGGR_INIT_EXPR_SLOT (whole) = var;
+	}
+      else if (TREE_CODE (init) == INIT_EXPR && TREE_OPERAND (init, 0) == var)
+	whole = unshare_expr (TREE_OPERAND (init, 1));
+      else
+	return;
+      split_initializers->put (var, whole);
+    }
+  if (!static_init_guards)
+    static_init_guards = decl_tree_map::create_ggc (16);
+  static_init_guards->put (guard, var);
+}
+
 /* A declaration with several declarators, as in `double a = x, b = a * a;`,
    is one declaration statement, but GCC declares each variable with a
    DECL_EXPR of its own, and nothing in the trees says which DECL_EXPRs came
@@ -3627,14 +3670,30 @@ constructed_object (tree call)
   return NULL_TREE;
 }
 
+/* walk_tree callback for split_initialization_p: the static local whose
+   guard variable *TP is, if any.  */
+
+static tree
+find_static_init_guard (tree *tp, int *walk_subtrees, void *)
+{
+  if (TYPE_P (*tp))
+    *walk_subtrees = 0;
+  else if (VAR_P (*tp))
+    if (tree *var = static_init_guards->get (*tp))
+      return *var;
+  return NULL_TREE;
+}
+
 /* True if STMT is the split initialization of a variable: part of the
    variable's declaration, not a statement of its own.  It is one
    initialization of a subobject of the variable, or a list of them, along
    with the flags that build_disable_temp_cleanup adds, that starts with one,
-   or the call of the variable's constructor.  The source can't initialize a
-   subobject of a declared variable, only assign to it, which is a
-   MODIFY_EXPR, and it can't call a constructor.  Look at the trees rather
-   than remember the statement: a reflection of a block can be a copy.  */
+   or the call of the variable's constructor, or the `if' on the guard
+   variable of a static local.  The source can't initialize a subobject of a
+   declared variable, only assign to it, which is a MODIFY_EXPR, it can't
+   call a constructor, and it can't name a guard variable.  Look at the trees
+   rather than remember the statement: a reflection of a block can be a
+   copy.  */
 
 static bool
 split_initialization_p (tree stmt)
@@ -3656,6 +3715,16 @@ split_initialization_p (tree stmt)
     }
   if (tree obj = constructed_object (stmt))
     return VAR_P (obj) && split_initializers->get (obj);
+  if (static_init_guards && stmt
+      && (TREE_CODE (stmt) == IF_STMT || TREE_CODE (stmt) == COND_EXPR))
+    {
+      tree cond = (TREE_CODE (stmt) == IF_STMT
+		   ? IF_COND (stmt) : COND_EXPR_COND (stmt));
+      tree var = cp_walk_tree_without_duplicates (&cond,
+						  find_static_init_guard,
+						  NULL);
+      return var && split_initializers->get (var);
+    }
   if (!stmt || TREE_CODE (stmt) != INIT_EXPR)
     return false;
   tree sub = TREE_OPERAND (stmt, 0);

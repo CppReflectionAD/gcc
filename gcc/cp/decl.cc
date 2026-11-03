@@ -11936,6 +11936,9 @@ expand_static_init (tree decl, tree init)
       /* Create the guard variable.  */
       guard = get_guard (decl);
 
+      if (flag_reflection)
+	reflection_record_static_init (decl, guard, init);
+
       /* Begin the conditional initialization.  */
       if_stmt = begin_if_stmt ();
 

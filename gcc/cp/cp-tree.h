@@ -9565,6 +9565,7 @@ extern bool reflection_function_template_p (const_tree) ATTRIBUTE_PURE;
 extern void dump_data_member_spec (pretty_printer *, tree);
 extern tree reflection_split_nonconstant_init (tree, tree);
 extern void reflection_record_constructor_init (tree, tree);
+extern void reflection_record_static_init (tree, tree, tree);
 extern void reflection_record_declarators (const vec<tree> &);
 extern void reflection_instantiate_declarator (tree, tree);
 
