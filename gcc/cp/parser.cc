@@ -11936,27 +11936,37 @@ cp_parser_binary_expression (cp_parser* parser, bool cast_p,
 	  --c_inhibit_evaluation_warnings;
 	}
 
+      /* Under -freflection, cp_build_unary_op keeps `!x' as written,
+	 rather than inverting x; look at it inverted, as without.  */
+      tree not_lhs = current.lhs;
+      if (warn_logical_not_paren
+	  && flag_reflection
+	  && !processing_template_decl
+	  && current.lhs_type == TRUTH_NOT_EXPR
+	  && TREE_CODE (not_lhs) == TRUTH_NOT_EXPR)
+	not_lhs = invert_truthvalue_loc (EXPR_LOCATION (not_lhs),
+					 TREE_OPERAND (not_lhs, 0));
       if (warn_logical_not_paren
 	  && TREE_CODE_CLASS (current.tree_type) == tcc_comparison
 	  && current.lhs_type == TRUTH_NOT_EXPR
 	  /* Avoid warning for !!x == y.  */
-	  && (TREE_CODE (current.lhs) != NE_EXPR
-	      || !integer_zerop (TREE_OPERAND (current.lhs, 1)))
-	  && (TREE_CODE (current.lhs) != TRUTH_NOT_EXPR
-	      || (TREE_CODE (TREE_OPERAND (current.lhs, 0)) != TRUTH_NOT_EXPR
+	  && (TREE_CODE (not_lhs) != NE_EXPR
+	      || !integer_zerop (TREE_OPERAND (not_lhs, 1)))
+	  && (TREE_CODE (not_lhs) != TRUTH_NOT_EXPR
+	      || (TREE_CODE (TREE_OPERAND (not_lhs, 0)) != TRUTH_NOT_EXPR
 		  /* Avoid warning for !b == y where b is boolean.  */
-		  && (TREE_TYPE (TREE_OPERAND (current.lhs, 0)) == NULL_TREE
-		      || (TREE_CODE (TREE_TYPE (TREE_OPERAND (current.lhs, 0)))
+		  && (TREE_TYPE (TREE_OPERAND (not_lhs, 0)) == NULL_TREE
+		      || (TREE_CODE (TREE_TYPE (TREE_OPERAND (not_lhs, 0)))
 			  != BOOLEAN_TYPE))))
 	  /* Avoid warning for !!b == y where b is boolean.  */
-	  && (!(DECL_P (tree_strip_any_location_wrapper (current.lhs))
-		|| (TREE_CODE (current.lhs) == NON_LVALUE_EXPR
+	  && (!(DECL_P (tree_strip_any_location_wrapper (not_lhs))
+		|| (TREE_CODE (not_lhs) == NON_LVALUE_EXPR
 		    && DECL_P (tree_strip_any_location_wrapper
-					    (TREE_OPERAND (current.lhs, 0)))))
-	      || TREE_TYPE (current.lhs) == NULL_TREE
-	      || TREE_CODE (TREE_TYPE (current.lhs)) != BOOLEAN_TYPE))
+					    (TREE_OPERAND (not_lhs, 0)))))
+	      || TREE_TYPE (not_lhs) == NULL_TREE
+	      || TREE_CODE (TREE_TYPE (not_lhs)) != BOOLEAN_TYPE))
 	warn_logical_not_parentheses (current.loc, current.tree_type,
-				      current.lhs, maybe_constant_value (rhs));
+				      not_lhs, maybe_constant_value (rhs));
 
       if (warn_xor_used_as_pow
 	  && current.tree_type == BIT_XOR_EXPR

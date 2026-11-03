@@ -59,7 +59,7 @@ consteval bool run_test() {
   if (!is_statement(ret_stmt)) return false;
   if (!is_return_statement(ret_stmt)) return false;
 
-  // The returned expression: (exp(-x) + 1.0f) + 1.0f
+  // The returned expression, as written: 1.0f + (exp(-x) + 1.0f)
   info rhs = return_operand_of(ret_stmt);
   if (!is_expression(rhs)) return false;
   if (!is_binary_operator(rhs)) return false;
@@ -68,13 +68,13 @@ consteval bool run_test() {
   auto rhs_ops = operands_of(rhs);
   if (rhs_ops.size() != 2) return false;
 
+  // 1.0f literal
+  if (!is_literal(rhs_ops[0])) return false;
+
   // (exp(-x) + 1.0f)
-  info inner_plus = rhs_ops[0];
+  info inner_plus = rhs_ops[1];
   if (!is_binary_operator(inner_plus)) return false;
   if (operator_of(inner_plus) != operators::op_plus) return false;
-
-  // 1.0f literal
-  if (!is_literal(rhs_ops[1])) return false;
 
   auto inner_ops = operands_of(inner_plus);
   if (inner_ops.size() != 2) return false;
