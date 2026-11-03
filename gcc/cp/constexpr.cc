@@ -10022,7 +10022,7 @@ cxx_eval_constant_expression (const constexpr_ctx *ctx, tree t,
     case DECL_EXPR:
       {
 	r = DECL_EXPR_DECL (t);
-	if (TREE_CODE (r) == USING_DECL)
+	if (TREE_CODE (r) == USING_DECL || TREE_CODE (r) == TYPE_DECL)
 	  {
 	    r = void_node;
 	    break;

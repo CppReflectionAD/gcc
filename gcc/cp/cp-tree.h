@@ -9568,6 +9568,8 @@ extern void reflection_record_constructor_init (tree, tree);
 extern void reflection_record_static_init (tree, tree, tree);
 extern void reflection_record_declarators (const vec<tree> &);
 extern void reflection_instantiate_declarator (tree, tree);
+extern tree reflection_declaration_marker (location_t);
+extern bool reflection_declaration_marker_p (tree);
 
 /* Inline bodies.  */
 
