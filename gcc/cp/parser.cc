@@ -14706,8 +14706,22 @@ cp_parser_statement (cp_parser* parser, tree in_statement_expr,
 
       std_attrs = process_stmt_hotness_attribute (std_attrs, attrs_loc);
 
+      /* Under -freflection, a null statement is a statement of its block.
+	 One with attributes keeps the meaning they give it.  */
+      bool null_statement_p
+	= (flag_reflection
+	   && in_compound
+	   && !in_statement_expr
+	   && !has_std_attrs
+	   && at_function_scope_p ()
+	   && cp_lexer_next_token_is (parser->lexer, CPP_SEMICOLON));
+
       /* Look for an expression-statement instead.  */
       statement = cp_parser_expression_statement (parser, in_statement_expr);
+
+      if (null_statement_p)
+	statement = add_stmt (reflection_null_statement_marker
+			      (statement_location));
 
       std_attrs = process_stmt_assume_attribute (std_attrs, statement,
 						 attrs_loc);

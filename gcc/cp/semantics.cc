@@ -1408,6 +1408,26 @@ finish_if_stmt (tree if_stmt)
   add_stmt (do_poplevel (scope));
 }
 
+/* True if T has only the markers that -freflection adds for null statements,
+   which aren't in the tree without it.  */
+
+static bool
+only_null_statement_markers_p (tree t)
+{
+  if (t == NULL_TREE)
+    return true;
+  if (TREE_CODE (t) == STATEMENT_LIST)
+    {
+      for (tree stmt : tsi_range (t))
+	if (TREE_CODE (stmt) != DEBUG_BEGIN_STMT
+	    && !only_null_statement_markers_p (stmt))
+	  return false;
+      return true;
+    }
+  return (TREE_CODE (t) == DECL_EXPR
+	  && reflection_null_statement_marker_p (DECL_EXPR_DECL (t)));
+}
+
 /* Determine if iteration statement with *CONDP condition and
    loop BODY is trivially empty iteration statement or even
    trivial infinite loop.  In the latter case for -ffinite-loops
@@ -1420,7 +1440,9 @@ finish_loop_cond (tree *condp, tree body)
 {
   if (TREE_CODE (*condp) == INTEGER_CST)
     return;
-  bool trivially_empty = expr_first (body) == NULL_TREE;
+  bool trivially_empty = (expr_first (body) == NULL_TREE
+			  || (flag_reflection
+			      && only_null_statement_markers_p (body)));
   bool trivial_infinite = false;
   if (trivially_empty)
     {

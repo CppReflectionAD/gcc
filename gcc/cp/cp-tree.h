@@ -9575,6 +9575,8 @@ extern void reflection_install_body_tables (const vec<tree> &,
 					    const vec<tree> &);
 extern tree reflection_declaration_marker (location_t);
 extern bool reflection_declaration_marker_p (tree);
+extern tree reflection_null_statement_marker (location_t);
+extern bool reflection_null_statement_marker_p (tree);
 
 /* Inline bodies.  */
 
