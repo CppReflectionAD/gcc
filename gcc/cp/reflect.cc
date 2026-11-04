@@ -4784,6 +4784,37 @@ eval_is_literal (tree r)
   return boolean_false_node;
 }
 
+/* If R copies a glvalue of a trivially copyable class into a temporary, as
+   for `a` passed by value in `f (a)`, return the glvalue, otherwise NULL_TREE.
+   There's no constructor call to see, only TARGET_EXPR <D.1, a>, but it's the
+   same construction as a non-trivial copy.  */
+
+static tree
+class_copy_source (tree r)
+{
+  while (r && TREE_CODE (r) == CLEANUP_POINT_EXPR)
+    r = TREE_OPERAND (r, 0);
+  if (r && TREE_CODE (r) == TARGET_EXPR && CLASS_TYPE_P (TREE_TYPE (r)))
+    if (tree init = TARGET_EXPR_INITIAL (r))
+      if (glvalue_p (init))
+	return init;
+  return NULL_TREE;
+}
+
+/* A class with a non-trivial copy constructor or destructor is passed by
+   invisible reference, so its argument is the address of a temporary.  The
+   source has no `&`: the operand is the temporary.  */
+
+static tree
+strip_invisible_reference_arg (tree arg)
+{
+  if (TREE_CODE (arg) == ADDR_EXPR
+      && TYPE_REF_P (TREE_TYPE (arg))
+      && TREE_CODE (TREE_OPERAND (arg, 0)) == TARGET_EXPR)
+    return TREE_OPERAND (arg, 0);
+  return arg;
+}
+
 /* True if R is a conversion.  That includes the dereference that
    convert_from_reference puts around a use of a reference: it isn't a `*`
    in the source but the lvalue the reference refers to.  Around a call
@@ -4823,6 +4854,8 @@ is_construct_tree (tree r)
 {
   if (!r)
     return false;
+  if (class_copy_source (r))
+    return true;
   while (r && (TREE_CODE (r) == CLEANUP_POINT_EXPR
 	       || (TREE_CODE (r) == TARGET_EXPR && TARGET_EXPR_INITIAL (r))))
     {
@@ -4846,6 +4879,8 @@ construct_operand_count (tree r)
 {
   if (!r)
     return -1;
+  if (class_copy_source (r))
+    return 1;
   while (r && (TREE_CODE (r) == CLEANUP_POINT_EXPR
 	       || (TREE_CODE (r) == TARGET_EXPR && TARGET_EXPR_INITIAL (r))))
     {
@@ -5202,6 +5237,13 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
   vec<constructor_elt, va_gc> *elts = nullptr;
   bool is_postfix_op = (eval_is_postfix (r) == boolean_true_node);
 
+  if (tree source = class_copy_source (r))
+    {
+      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+			      get_reflection_raw_expression (loc, source));
+      return get_vector_of_info_elts (elts);
+    }
+
   if (tree call = unwrap_call_expr (r))
     {
       tree fn = call_fndecl (call);
@@ -5239,6 +5281,7 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
 	      return !is_postfix_op;
 	    }
 	  first_arg = false;
+	  arg = strip_invisible_reference_arg (arg);
 	  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
 				  get_reflection_raw_expression (loc, arg));
 	  return !is_postfix_op;
@@ -5280,8 +5323,10 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
       int nargs = aggr_init_expr_nargs (r);
       for (int i = 1; i < nargs; ++i)
 	if (tree arg = AGGR_INIT_EXPR_ARG (r, i))
-	  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-				  get_reflection_raw_expression (loc, arg));
+	  CONSTRUCTOR_APPEND_ELT
+	    (elts, NULL_TREE,
+	     get_reflection_raw_expression
+	       (loc, strip_invisible_reference_arg (arg)));
     }
   else if (code == CONSTRUCTOR)
     {
