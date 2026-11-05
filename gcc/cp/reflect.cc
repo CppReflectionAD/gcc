@@ -10184,10 +10184,11 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
   if (id_expression_p)
     {
       /* An id-expression is an expression, not the entity it names: it
-	 answers like `a + b` does, except that is_id_expression is true and
-	 declaration_of gives the entity.  So is_variable, is_function,
-	 has_identifier and the other entity predicates are false, and
-	 queries such as identifier_of or parent_of throw, as on clang.  */
+	 answers like `a + b` does, except that is_id_expression is true,
+	 declaration_of gives the entity, and constant_of gives the entity's
+	 constant.  So is_variable, is_function, has_identifier and the other
+	 entity predicates are false, and queries such as identifier_of or
+	 parent_of throw, as on clang.  */
       switch (minfo->code)
 	{
 	case METAFN_IS_EXPRESSION:
@@ -10196,6 +10197,7 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
 	case METAFN_OPERANDS_OF:
 	  return get_vector_of_info_elts (nullptr);
 	case METAFN_DECLARATION_OF:
+	case METAFN_CONSTANT_OF:
 	case METAFN_SOURCE_LOCATION_OF:
 	case METAFN_DISPLAY_STRING_OF:
 	case METAFN_U8DISPLAY_STRING_OF:
