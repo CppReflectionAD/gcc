@@ -4815,6 +4815,44 @@ strip_invisible_reference_arg (tree arg)
   return arg;
 }
 
+/* cp_build_addr_expr_1 cancels the `&*` of `&*p` to the rvalue of `p`.  Return
+   the dereference the source has, given what's left of it, PTR.  An rvalue of
+   an lvalue pointer is NON_LVALUE_EXPR <p>, which on its own would be a unary
+   plus (see eval_operator_of), but the source has no `+` here.  */
+
+static tree
+deref_of_cancelled_address (tree ptr)
+{
+  if (TREE_CODE (ptr) == NON_LVALUE_EXPR)
+    ptr = TREE_OPERAND (ptr, 0);
+  return build1_loc (EXPR_LOCATION (ptr), INDIRECT_REF,
+		     TREE_TYPE (TREE_TYPE (ptr)), ptr);
+}
+
+/* True if R, which converts a pointer to a reference to its pointee, binds the
+   reference to a dereference whose `&*` has cancelled.  It may be the address
+   of an lvalue instead, in a form other than an ADDR_EXPR: unary_complex_lvalue
+   lowers the address of `c ? a : b` to `c ? &a : &b`, and cp_genericize_r the
+   address of a parameter passed by invisible reference to a conversion of the
+   parameter.  */
+
+static bool
+binds_cancelled_deref_p (tree r)
+{
+  if (!CONVERT_EXPR_P (r) || !TYPE_REF_P (TREE_TYPE (r)))
+    return false;
+  tree ptr = TREE_OPERAND (r, 0);
+  if (!TYPE_PTR_P (TREE_TYPE (ptr))
+      || !same_type_ignoring_top_level_qualifiers_p (TREE_TYPE (TREE_TYPE (r)),
+						     TREE_TYPE (TREE_TYPE (ptr))))
+    return false;
+  if (TREE_CODE (ptr) == ADDR_EXPR || TREE_CODE (ptr) == COND_EXPR)
+    return false;
+  if (CONVERT_EXPR_P (ptr) && is_invisiref_parm (TREE_OPERAND (ptr, 0)))
+    return false;
+  return true;
+}
+
 /* True if R is a conversion.  That includes the dereference that
    convert_from_reference puts around a use of a reference: it isn't a `*`
    in the source but the lvalue the reference refers to.  Around a call
@@ -5272,8 +5310,7 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		       but the object in the source is the dereference.  (A
 		       reference object stays the reference: `r * x` has the
 		       operand `r`.)  */
-		    arg = build1_loc (EXPR_LOCATION (arg), INDIRECT_REF,
-				      TREE_TYPE (TREE_TYPE (arg)), arg);
+		    arg = deref_of_cancelled_address (arg);
 		  CONSTRUCTOR_APPEND_ELT
 		    (elts, NULL_TREE,
 		     get_reflection_raw_expression (loc, arg));
@@ -5357,6 +5394,14 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
       CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
 			      get_reflection_raw_expression (loc, op));
     }
+  else if (binds_cancelled_deref_p (r))
+    /* Binding a reference to `*p` takes `&*p`, which cancels, so what's
+       converted to the reference type is `p`.  The operand in the source is
+       the dereference.  */
+    CONSTRUCTOR_APPEND_ELT
+      (elts, NULL_TREE,
+       get_reflection_raw_expression
+	 (loc, deref_of_cancelled_address (TREE_OPERAND (r, 0))));
   else
     {
       int len = cp_tree_operand_length (r);
