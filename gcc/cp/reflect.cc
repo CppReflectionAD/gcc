@@ -5240,6 +5240,44 @@ compound_assignment_rhs (tree r)
   return b;
 }
 
+/* Return the lvalue T with the SAVE_EXPRs that cp_stabilize_reference
+   added removed.  For a compound assignment `a op= b', it evaluates the
+   parts of `a' with side effects once, so `f () += b' has the left operand
+   `*SAVE_EXPR <f ()>' and `p[i++] += b' has `*SAVE_EXPR <p + i++ * 8>'.
+   The source has neither: the operand is `f ()' or `p[i++]', as for a
+   simple assignment.  */
+
+static tree
+unsave_lvalue (tree t)
+{
+  if (TREE_CODE (t) == SAVE_EXPR)
+    return unsave_lvalue (TREE_OPERAND (t, 0));
+  int n;
+  if (TREE_CODE (t) == ARRAY_REF || TREE_CODE (t) == ARRAY_RANGE_REF)
+    n = 2;
+  else if (INDIRECT_REF_P (t)
+	   || TREE_CODE (t) == COMPONENT_REF
+	   || TREE_CODE (t) == BIT_FIELD_REF
+	   || CONVERT_EXPR_P (t)
+	   || TREE_CODE (t) == NON_LVALUE_EXPR)
+    n = 1;
+  else
+    return t;
+  tree copy = t;
+  for (int i = 0; i < n; ++i)
+    if (tree op = TREE_OPERAND (t, i))
+      {
+	tree unsaved = unsave_lvalue (op);
+	if (unsaved != op)
+	  {
+	    if (copy == t)
+	      copy = copy_node (t);
+	    TREE_OPERAND (copy, i) = unsaved;
+	  }
+      }
+  return copy;
+}
+
 static tree
 eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		  bool *non_constant_p, tree *jump_target, tree fun)
@@ -5348,7 +5386,7 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
       /* `a op= b' has the operands `a' and `b', not `a' and `a op b'.  */
       CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
 			      get_reflection_raw_expression
-				(loc, TREE_OPERAND (r, 0)));
+				(loc, unsave_lvalue (TREE_OPERAND (r, 0))));
       CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
 			      get_reflection_raw_expression
 				(loc, compound_assignment_rhs (r)));

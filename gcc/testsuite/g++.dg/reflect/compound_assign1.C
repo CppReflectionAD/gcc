@@ -10,6 +10,7 @@ using namespace std::meta;
 
 struct P { double x, y; };
 double g ();
+double &r ();
 
 void add (double &a, double b) { a += b; }
 void sub (double &a, double b) { a -= b; }
@@ -28,6 +29,11 @@ void call (double &a) { a += g (); }
 void member (P &p) { p.x += p.y * 0.5; }
 void folded (double &a) { a += 2.0 * 3.0; }
 void pointer (double *&p, int n) { p += n; }
+void pointer_sub (double *&p, int n) { p -= n; }
+void lcall (double b) { r () += b; }
+void lcall_plain (double b) { r () = b; }
+void lsub (double *a, int i, double b) { a[i++] += b; }
+void lsub_plain (double *a, int i, double b) { a[i++] = b; }
 void nested (double &c, double &a, double b) { c = (a += b); }
 void init (double &a, double b) { double c = (a *= b); }
 template <typename T> void tmpl (T &a, T b) { a -= b; }
@@ -117,6 +123,27 @@ static_assert (op (^^folded) == operators::op_plus_equals);
 static_assert (operands_of (expr (^^folded)).size () == 2);
 
 static_assert (op (^^pointer) == operators::op_plus_equals);
+static_assert (op (^^pointer_sub) == operators::op_minus_equals);
+
+// A left operand with side effects is evaluated once, but it is still the
+// operand as written, as in a simple assignment.
+consteval bool
+same_lhs (info compound, info simple)
+{
+  info a = strip (operands_of (expr (compound))[0]);
+  info b = strip (operands_of (expr (simple))[0]);
+  return (is_function_call (a) == is_function_call (b)
+	  && is_operator_expression (a) == is_operator_expression (b)
+	  && (!is_operator_expression (a)
+	      || expression_operator_of (a) == expression_operator_of (b)));
+}
+static_assert (op (^^lcall) == operators::op_plus_equals);
+static_assert (is_function_call (strip (operands_of (expr (^^lcall))[0])));
+static_assert (names (operands_of (expr (^^lcall))[1], "b"));
+static_assert (same_lhs (^^lcall, ^^lcall_plain));
+static_assert (op (^^lsub) == operators::op_plus_equals);
+static_assert (names (operands_of (expr (^^lsub))[1], "b"));
+static_assert (same_lhs (^^lsub, ^^lsub_plain));
 
 static_assert (op (^^nested) == operators::op_equals);
 static_assert (expression_operator_of (strip (operands_of (expr (^^nested))[1]))
