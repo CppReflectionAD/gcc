@@ -10,6 +10,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY opt/gcc /opt/gcc
 
 ENV PATH=/opt/gcc/bin:$PATH \
-    LD_LIBRARY_PATH=/opt/gcc/lib64
+    LD_LIBRARY_PATH=/opt/gcc/lib64:/opt/gcc/lib
 
 CMD ["g++", "--version"]
