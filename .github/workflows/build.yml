@@ -38,7 +38,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          GCC_REPO="https://x-access-token:${GH_TOKEN}@github.com/CppReflectionAD/gcc.git"
+          if [ "${{ github.repository }}" = "CppReflectionAD/gcc" ]; then
+            GCC_REPO="https://x-access-token:${GH_TOKEN}@github.com/CppReflectionAD/gcc.git"
+          else
+            GCC_REPO="https://github.com/CppReflectionAD/gcc.git"
+          fi
           git fetch --no-tags --depth=100 "$GCC_REPO" +refs/heads/p4395:refs/remotes/gcc/p4395
           sha="$(git merge-base HEAD gcc/p4395)"
           echo "Merge-base commit: $sha"
