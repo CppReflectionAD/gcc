@@ -485,6 +485,7 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       LAMBDA_EXPR_CONST_QUAL_P (in LAMBDA_EXPR)
       SPLICE_EXPR_MEMBER_ACCESS_P (in SPLICE_EXPR)
       PACK_INDEX_PARENTHESIZED_P (in PACK_INDEX_*)
+      modify_expr_compound_code (in MODIFY_EXPR)
    2: IDENTIFIER_KIND_BIT_2 (in IDENTIFIER_NODE)
       ICS_THIS_FLAG (in _CONV)
       DECL_INITIALIZED_BY_CONSTANT_EXPRESSION_P (in VAR_DECL)
@@ -509,6 +510,7 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       MUST_NOT_THROW_CATCH_P (in MUST_NOT_THROW_EXPR)
       MULTIPLE_NAMES_PARM_P (in PARM_DECL)
       SPLICE_EXPR_ADDRESS_P (in SPLICE_EXPR)
+      modify_expr_compound_code (in MODIFY_EXPR)
    3: IMPLICIT_RVALUE_P (in NON_LVALUE_EXPR or STATIC_CAST_EXPR)
       ICS_BAD_FLAG (in _CONV)
       FN_TRY_BLOCK_P (in TRY_BLOCK)
@@ -524,6 +526,7 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       IF_STMT_VACUOUS_INIT_P (IF_STMT)
       TYPENAME_IS_RESOLVING_P (in TYPENAME_TYPE)
       SPLICE_EXPR_TEMPLATE_P (in SPLICE_EXPR)
+      modify_expr_compound_code (in MODIFY_EXPR)
    4: IDENTIFIER_MARKED (IDENTIFIER_NODEs)
       TREE_HAS_CONSTRUCTOR (in INDIRECT_REF, SAVE_EXPR, CONSTRUCTOR,
 	  CALL_EXPR, or FIELD_DECL).
@@ -536,6 +539,7 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       CONTRACT_CONST (in ASSERTION_, PRECONDITION_, POSTCONDITION_STMT)
       DECL_HAS_DEFAULT_ARGUMENT_P (in PARM_DECL)
       SPLICE_EXPR_TARGS_P (in SPLICE_EXPR)
+      modify_expr_compound_code (in MODIFY_EXPR)
    5: IDENTIFIER_VIRTUAL_P (in IDENTIFIER_NODE)
       FUNCTION_RVALUE_QUALIFIED (in FUNCTION_TYPE, METHOD_TYPE)
       CALL_EXPR_REVERSE_ARGS (in CALL_EXPR, AGGR_INIT_EXPR)
@@ -4518,6 +4522,12 @@ struct GTY(()) lang_decl {
 /* True iff this represents returning a potential named return value.  */
 #define INIT_EXPR_NRV_P(NODE) \
   TREE_LANG_FLAG_0 (INIT_EXPR_CHECK (NODE))
+
+/* Under -freflection, a MODIFY_EXPR for a compound assignment `a op= b'
+   of non-class type, which cp_build_modify_expr builds as `a = a op b',
+   keeps the code of `op' in TREE_LANG_FLAG_1 to TREE_LANG_FLAG_4, so that
+   reflection can give the operator as written.  Read and write it with
+   modify_expr_compound_code and set_modify_expr_compound_code.  */
 
 #define CALL_OR_AGGR_INIT_CHECK(NODE) \
   TREE_CHECK2 ((NODE), CALL_EXPR, AGGR_INIT_EXPR)
@@ -9026,6 +9036,8 @@ extern cp_expr build_x_modify_expr		(location_t, tree,
 extern tree cp_build_modify_expr		(location_t, tree,
 						 enum tree_code, tree,
 						 tsubst_flags_t);
+extern enum tree_code modify_expr_compound_code	(const_tree);
+extern void set_modify_expr_compound_code	(tree, enum tree_code);
 extern tree convert_for_initialization		(tree, tree, tree, int,
 						 impl_conv_rhs, tree, int,
                                                  tsubst_flags_t);
