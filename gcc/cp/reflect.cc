@@ -3613,6 +3613,47 @@ reflection_declaration_marker_p (tree decl)
 	  && !DECL_ORIGINAL_TYPE (decl));
 }
 
+/* A null statement is an expression statement with no expression
+   ([stmt.expr]), but the parser adds nothing to the block for one.  Under
+   -freflection, cp_parser_statement gives it a DECL_EXPR of a marker like
+   those above, whose type is const void so that it isn't taken for a
+   declaration.  */
+
+/* Return a DECL_EXPR of a new null statement marker at LOC.  */
+
+tree
+reflection_null_statement_marker (location_t loc)
+{
+  tree type = cp_build_qualified_type (void_type_node, TYPE_QUAL_CONST);
+  tree marker = build_decl (loc, TYPE_DECL, NULL_TREE, type);
+  DECL_ARTIFICIAL (marker) = 1;
+  DECL_IGNORED_P (marker) = 1;
+  DECL_CONTEXT (marker) = current_function_decl;
+  return build_stmt (loc, DECL_EXPR, marker);
+}
+
+/* Whether DECL is a null statement marker.  */
+
+bool
+reflection_null_statement_marker_p (tree decl)
+{
+  return (TREE_CODE (decl) == TYPE_DECL
+	  && !DECL_NAME (decl)
+	  && DECL_ARTIFICIAL (decl)
+	  && VOID_TYPE_P (TREE_TYPE (decl))
+	  && TYPE_QUALS (TREE_TYPE (decl)) == TYPE_QUAL_CONST
+	  && !DECL_ORIGINAL_TYPE (decl));
+}
+
+/* Whether R reflects a null statement.  */
+
+static bool
+null_statement_p (tree r)
+{
+  return (r && TREE_CODE (r) == DECL_EXPR
+	  && reflection_null_statement_marker_p (DECL_EXPR_DECL (r)));
+}
+
 /* A declaration with several declarators, as in `double a = x, b = a * a;`,
    is one declaration statement, but GCC declares each variable with a
    DECL_EXPR of its own, and nothing in the trees says which DECL_EXPRs came
@@ -4638,6 +4679,8 @@ eval_initializers_of (location_t loc, const constexpr_ctx *ctx, tree r,
 static tree
 eval_is_expression_statement (tree r)
 {
+  if (null_statement_p (r))
+    return boolean_true_node;
   if (!r
       || eval_is_compound_statement (r) == boolean_true_node
       || eval_is_declaration_statement (r) == boolean_true_node
@@ -4668,6 +4711,11 @@ eval_expression_of (location_t loc, const constexpr_ctx *ctx, tree r,
     return throw_exception (loc, ctx,
 			    "reflection does not represent an expression "
 			    "statement", fun, non_constant_p, jump_target);
+  if (null_statement_p (r))
+    return throw_exception (loc, ctx,
+			    "reflection represents a null statement, which "
+			    "has no expression", fun, non_constant_p,
+			    jump_target);
   while (r && (TREE_CODE (r) == CLEANUP_POINT_EXPR
 	       || TREE_CODE (r) == EXPR_STMT
 	       || (CONVERT_EXPR_P (r) && VOID_TYPE_P (TREE_TYPE (r)))))
