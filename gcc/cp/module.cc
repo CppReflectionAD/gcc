@@ -13176,6 +13176,21 @@ trees_out::write_function_def (tree decl)
     auto ovr = dep_hash->ignore_exposure_if (!DECL_DECLARED_INLINE_P (decl));
     tree_node (DECL_INITIAL (decl));
     tree_node (DECL_SAVED_TREE (decl));
+
+    if (flag_reflection)
+      {
+	/* What reflect.cc keeps in tables about the body's variables.  */
+	auto_vec<tree> groups, inits, guards;
+	reflection_body_tables (DECL_SAVED_TREE (decl), groups, inits,
+				guards);
+	for (auto *table : { &groups, &inits, &guards })
+	  {
+	    if (streaming_p ())
+	      u (table->length ());
+	    for (tree t : *table)
+	      tree_node (t);
+	  }
+      }
   }
 
   tree_node (DECL_FRIEND_CONTEXT (decl));
@@ -13255,6 +13270,11 @@ trees_in::read_function_def (tree decl, tree maybe_template)
   tree result = tree_node ();
   tree initial = tree_node ();
   tree saved = tree_node ();
+  auto_vec<tree> reflection_tables[3];
+  if (flag_reflection)
+    for (auto &table : reflection_tables)
+      for (unsigned ix = u (); ix-- && !get_overrun ();)
+	table.safe_push (tree_node ());
   tree context = tree_node ();
   post_process_data pdata {};
   pdata.decl = maybe_template;
@@ -13320,6 +13340,10 @@ trees_in::read_function_def (tree decl, tree maybe_template)
 	SET_DECL_FRIEND_CONTEXT (decl, context);
       if (cexpr.decl)
 	register_constexpr_fundef (cexpr);
+      if (flag_reflection)
+	reflection_install_body_tables (reflection_tables[0],
+					reflection_tables[1],
+					reflection_tables[2]);
 
       if (coro_ramp)
 	coro_set_ramp_function (decl, coro_ramp);

@@ -1190,7 +1190,9 @@ store_init_value (tree decl, tree init, vec<tree, va_gc>** cleanups, int flags)
       && (TREE_SIDE_EFFECTS (value)
 	  || vla_type_p (type)
 	  || ! reduced_constant_expression_p (value)))
-    return split_nonconstant_init (decl, value);
+    return (flag_reflection
+	    ? reflection_split_nonconstant_init (decl, value)
+	    : split_nonconstant_init (decl, value));
 
   /* DECL may change value; purge caches.  */
   clear_cv_and_fold_caches ();

@@ -80,6 +80,9 @@ enum fold_flags {
      we should do as little other folding as possible.
      Mutually exclusive with ff_mce_false.  */
   ff_only_non_odr = 1 << 2,
+  /* Whether to keep the operators of the user's expressions as written,
+     for reflection; see cp_fold_keeps_operator_p.  */
+  ff_keep_operators = 1 << 3,
 };
 
 using fold_flags_t = int;
@@ -105,6 +108,7 @@ static tree cp_genericize_r (tree *, int *, void *);
 static tree cp_fold_r (tree *, int *, void *);
 static void cp_genericize_tree (tree*, bool);
 static tree cp_fold (tree, fold_flags_t);
+static bool cp_fold_keeps_operator_p (tree_code, fold_flags_t);
 static tree cp_fold_immediate_r (tree *, int *, void *);
 
 /* Genericize a TRY_BLOCK.  */
@@ -675,6 +679,23 @@ maybe_emit_clobber_object_begin (tree decl, gimple_seq *pre_p)
     }
 }
 
+/* Return true if CALL is a call to an overloaded operator().  */
+
+static bool
+is_call_operator_fn (tree call)
+{
+  tree fn = cp_get_callee (call);
+  if (!fn)
+    return false;
+  if (TREE_CODE (fn) == OBJ_TYPE_REF)
+    fn = resolve_virtual_fun_from_obj_type_ref (fn);
+  else if (TREE_CODE (fn) == ADDR_EXPR)
+    fn = TREE_OPERAND (fn, 0);
+  return (fn && TREE_CODE (fn) == FUNCTION_DECL
+	  && DECL_OVERLOADED_OPERATOR_P (fn)
+	  && DECL_OVERLOADED_OPERATOR_IS (fn, CALL_EXPR));
+}
+
 /* Do C++-specific gimplification.  Args are as for gimplify_expr.  */
 
 int
@@ -684,6 +705,36 @@ cp_gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
   location_t loc = cp_expr_loc_or_input_loc (*expr_p);
   enum tree_code code = TREE_CODE (*expr_p);
   enum gimplify_status ret;
+
+  /* Under -freflection, cp_fold_function kept the operators of the body as
+     written, for std::meta::operands_of; fold them now, as it would have.
+     The code can still differ in shape from the code without -freflection,
+     as a folder that saw an operator folded then sees it as written.  */
+  if (flag_reflection)
+    {
+      tree *fold_p = NULL;
+      if (cp_fold_keeps_operator_p (code, ff_keep_operators))
+	fold_p = expr_p;
+      /* The condition of a COND_EXPR is split into jumps without reaching
+	 here.  Fold only the condition: the gimplifier makes `c ? true :
+	 false' of a `c && d' that is a value, which folds back to `c && d'.
+	 A vector conditional folds as a whole once its condition is folded,
+	 as into an ABS_EXPR.  */
+      else if (code == COND_EXPR)
+	fold_p = &TREE_OPERAND (*expr_p, 0);
+      else if (code == VEC_COND_EXPR)
+	fold_p = expr_p;
+      if (fold_p)
+	{
+	  tree folded = cp_fold (*fold_p, ff_genericize | ff_mce_false);
+	  if (folded != *fold_p)
+	    {
+	      *fold_p = folded;
+	      if (fold_p == expr_p)
+		return GS_OK;
+	    }
+	}
+    }
 
   if (STATEMENT_CODE_P (code))
     {
@@ -935,7 +986,8 @@ cp_gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
 	    }
 	}
       else if (flag_strong_eval_order
-	       && !CALL_EXPR_OPERATOR_SYNTAX (*expr_p))
+	       && (!CALL_EXPR_OPERATOR_SYNTAX (*expr_p)
+		   || is_call_operator_fn (*expr_p)))
 	{
 	  /* If flag_strong_eval_order, evaluate the object argument first.  */
 	  tree fntype = TREE_TYPE (CALL_EXPR_FN (*expr_p));
@@ -1753,6 +1805,12 @@ cp_fold_r (tree *stmt_p, int *walk_subtrees, void *data_)
        }
       break;
 
+    case REFLECT_EXPR:
+      /* A reflection is a value, not code: don't fold the expression it
+	 reflects, as for `constexpr info r = initializer_of (s);'.  */
+      *walk_subtrees = 0;
+      break;
+
     default:
       break;
     }
@@ -1769,7 +1827,9 @@ cp_fold_function (tree fndecl)
   /* By now all manifestly-constant-evaluated expressions will have
      been constant-evaluated already if possible, so we can safely
      pass ff_mce_false.  */
-  cp_fold_data data (ff_genericize | ff_mce_false);
+  cp_fold_data data (ff_genericize | ff_mce_false
+		     | (flag_reflection
+			? ff_keep_operators : ff_none));
   /* Do cp_fold_immediate_r in separate whole IL walk instead of during
      cp_fold_r, as otherwise expressions using results of immediate functions
      might not be folded as cp_fold is called on those before cp_fold_r is
@@ -3277,7 +3337,8 @@ cp_fold_non_odr_use (tree x, bool rval)
 /* Perform folding on expression X.  */
 
 static tree
-cp_fully_fold (tree x, mce_value manifestly_const_eval)
+cp_fully_fold (tree x, mce_value manifestly_const_eval,
+	       fold_flags_t extra_flags = ff_none)
 {
   if (processing_template_decl)
     return x;
@@ -3298,7 +3359,7 @@ cp_fully_fold (tree x, mce_value manifestly_const_eval)
   fold_flags_t flags = ff_none;
   if (manifestly_const_eval == mce_false)
     flags |= ff_mce_false;
-  return cp_fold_rvalue (x, flags);
+  return cp_fold_rvalue (x, flags | extra_flags);
 }
 
 tree
@@ -3315,8 +3376,13 @@ cp_fully_fold_init (tree x)
 {
   if (processing_template_decl)
     return x;
-  x = cp_fully_fold (x, mce_false);
-  cp_fold_data data (ff_mce_false);
+  /* Under -freflection, keep the operators of an initializer in a function
+     as written, as cp_fold_function does.  */
+  fold_flags_t flags = ff_mce_false;
+  if (flag_reflection && current_function_decl)
+    flags |= ff_keep_operators;
+  x = cp_fully_fold (x, mce_false, flags & ff_keep_operators);
+  cp_fold_data data (flags);
   if (cxx_dialect >= cxx20)
     {
       cp_walk_tree (&x, cp_fold_immediate_r, &data, NULL);
@@ -3337,7 +3403,7 @@ c_fully_fold (tree x, bool /*in_init*/, bool */*maybe_const*/, bool lval)
   return cp_fold_maybe_rvalue (x, !lval);
 }
 
-static GTY((deletable)) hash_map<tree, tree> *fold_caches[3];
+static GTY((deletable)) hash_map<tree, tree> *fold_caches[4];
 
 /* Subroutine of cp_fold.  Returns which fold cache to use according
    to the given flags.  We need multiple caches since the result of
@@ -3346,12 +3412,63 @@ static GTY((deletable)) hash_map<tree, tree> *fold_caches[3];
 static hash_map<tree, tree> *&
 get_fold_cache (fold_flags_t flags)
 {
-  if (flags & ff_mce_false)
+  if (flags & ff_keep_operators)
+    return fold_caches[3];
+  else if (flags & ff_mce_false)
     return fold_caches[2];
   else if (flags & ff_only_non_odr)
     return fold_caches[1];
   else
     return fold_caches[0];
+}
+
+/* Under -freflection, std::meta::operands_of and expression_operator_of
+   reflect the operators of a function body as written, so the folding of
+   an initializer in a function (cp_fully_fold_init) and of the body for
+   genericization (cp_fold_function) folds an arithmetic, bitwise, logical
+   or comparison operator only into a constant, when its operands are
+   constants.  Otherwise the operator keeps its code and the order of its
+   operands, rather than becoming, say, `p + d' for `d + p', `0' for
+   `x - x', or `!a && !b' for `!(a || b)'.  cp_gimplify_expr folds it
+   later, once reflection has seen the body.  Return whether the folding
+   that FLAGS describe keeps an operator of CODE so.  */
+
+static bool
+cp_fold_keeps_operator_p (tree_code code, fold_flags_t flags)
+{
+  if (!(flags & ff_keep_operators))
+    return false;
+  switch (code)
+    {
+    case NEGATE_EXPR:
+    case BIT_NOT_EXPR:
+    case TRUTH_NOT_EXPR:
+    case PLUS_EXPR:
+    case MINUS_EXPR:
+    case MULT_EXPR:
+    case TRUNC_DIV_EXPR:
+    case RDIV_EXPR:
+    case TRUNC_MOD_EXPR:
+    case LSHIFT_EXPR:
+    case RSHIFT_EXPR:
+    case BIT_AND_EXPR:
+    case BIT_IOR_EXPR:
+    case BIT_XOR_EXPR:
+    case TRUTH_ANDIF_EXPR:
+    case TRUTH_ORIF_EXPR:
+    case TRUTH_AND_EXPR:
+    case TRUTH_OR_EXPR:
+    case TRUTH_XOR_EXPR:
+    case LT_EXPR:
+    case LE_EXPR:
+    case GT_EXPR:
+    case GE_EXPR:
+    case EQ_EXPR:
+    case NE_EXPR:
+      return true;
+    default:
+      return false;
+    }
 }
 
 /* Dispose of the whole FOLD_CACHE.  */
@@ -3569,6 +3686,19 @@ cp_fold (tree x, fold_flags_t flags)
       else if (!(flags & ff_only_non_odr))
 	x = fold (x);
 
+      if (x != org_x && x != error_mark_node
+	  && cp_fold_keeps_operator_p (code, flags)
+	  && !CONSTANT_CLASS_P (op0))
+	{
+	  if (op0 == TREE_OPERAND (org_x, 0))
+	    x = org_x;
+	  else
+	    {
+	      x = build1_loc (loc, code, TREE_TYPE (org_x), op0);
+	      copy_warning (x, org_x);
+	    }
+	}
+
       gcc_assert (TREE_CODE (x) != COND_EXPR
 		  || !VOID_TYPE_P (TREE_TYPE (TREE_OPERAND (x, 0))));
       break;
@@ -3686,6 +3816,19 @@ cp_fold (tree x, fold_flags_t flags)
 	x = fold_build2_loc (loc, code, TREE_TYPE (x), op0, op1);
       else
 	x = fold (x);
+
+      if (x != org_x && x != error_mark_node
+	  && cp_fold_keeps_operator_p (code, flags)
+	  && !(CONSTANT_CLASS_P (op0) && CONSTANT_CLASS_P (op1)))
+	{
+	  if (op0 == TREE_OPERAND (org_x, 0) && op1 == TREE_OPERAND (org_x, 1))
+	    x = org_x;
+	  else
+	    {
+	      x = build2_loc (loc, code, TREE_TYPE (org_x), op0, op1);
+	      copy_warning (x, org_x);
+	    }
+	}
 
       /* This is only needed for -Wnonnull-compare and only if
 	 TREE_NO_WARNING (org_x), but to avoid that option affecting code
@@ -3901,6 +4044,17 @@ cp_fold (tree x, fold_flags_t flags)
 	optimize = nw;
 	r = fold (x);
 	optimize = sv;
+
+	/* With -freflection, keep a call to a built-in function that would
+	   fold to an expression other than a constant, so that the reflection
+	   of the function body shows the call in the source: std::fabs (x)
+	   would otherwise be an ABS_EXPR.  The middle end folds it later.  */
+	if (flag_reflection
+	    && TREE_CODE (r) != CALL_EXPR
+	    && !CONSTANT_CLASS_P (r)
+	    && callee
+	    && fndecl_built_in_p (callee, BUILT_IN_NORMAL))
+	  r = x;
 
 	if (TREE_CODE (r) != CALL_EXPR)
 	  {

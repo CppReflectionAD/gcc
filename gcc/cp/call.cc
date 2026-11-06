@@ -5625,6 +5625,9 @@ build_op_call (tree obj, vec<tree, va_gc> **args, tsubst_flags_t complain)
 	       && DECL_OVERLOADED_OPERATOR_IS (cand->fn, CALL_EXPR))
 	{
 	  result = build_over_call (cand, LOOKUP_NORMAL, complain);
+	  if (result && result != error_mark_node)
+	    if (tree call = extract_call_expr (result))
+	      CALL_EXPR_OPERATOR_SYNTAX (call) = true;
 	  /* In an expression of the form `a()' where cand->fn
 	     which is operator() turns out to be a static member function,
 	     `a' is none-the-less evaluated.  */

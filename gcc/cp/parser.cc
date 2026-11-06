@@ -11936,27 +11936,37 @@ cp_parser_binary_expression (cp_parser* parser, bool cast_p,
 	  --c_inhibit_evaluation_warnings;
 	}
 
+      /* Under -freflection, cp_build_unary_op keeps `!x' as written,
+	 rather than inverting x; look at it inverted, as without.  */
+      tree not_lhs = current.lhs;
+      if (warn_logical_not_paren
+	  && flag_reflection
+	  && !processing_template_decl
+	  && current.lhs_type == TRUTH_NOT_EXPR
+	  && TREE_CODE (not_lhs) == TRUTH_NOT_EXPR)
+	not_lhs = invert_truthvalue_loc (EXPR_LOCATION (not_lhs),
+					 TREE_OPERAND (not_lhs, 0));
       if (warn_logical_not_paren
 	  && TREE_CODE_CLASS (current.tree_type) == tcc_comparison
 	  && current.lhs_type == TRUTH_NOT_EXPR
 	  /* Avoid warning for !!x == y.  */
-	  && (TREE_CODE (current.lhs) != NE_EXPR
-	      || !integer_zerop (TREE_OPERAND (current.lhs, 1)))
-	  && (TREE_CODE (current.lhs) != TRUTH_NOT_EXPR
-	      || (TREE_CODE (TREE_OPERAND (current.lhs, 0)) != TRUTH_NOT_EXPR
+	  && (TREE_CODE (not_lhs) != NE_EXPR
+	      || !integer_zerop (TREE_OPERAND (not_lhs, 1)))
+	  && (TREE_CODE (not_lhs) != TRUTH_NOT_EXPR
+	      || (TREE_CODE (TREE_OPERAND (not_lhs, 0)) != TRUTH_NOT_EXPR
 		  /* Avoid warning for !b == y where b is boolean.  */
-		  && (TREE_TYPE (TREE_OPERAND (current.lhs, 0)) == NULL_TREE
-		      || (TREE_CODE (TREE_TYPE (TREE_OPERAND (current.lhs, 0)))
+		  && (TREE_TYPE (TREE_OPERAND (not_lhs, 0)) == NULL_TREE
+		      || (TREE_CODE (TREE_TYPE (TREE_OPERAND (not_lhs, 0)))
 			  != BOOLEAN_TYPE))))
 	  /* Avoid warning for !!b == y where b is boolean.  */
-	  && (!(DECL_P (tree_strip_any_location_wrapper (current.lhs))
-		|| (TREE_CODE (current.lhs) == NON_LVALUE_EXPR
+	  && (!(DECL_P (tree_strip_any_location_wrapper (not_lhs))
+		|| (TREE_CODE (not_lhs) == NON_LVALUE_EXPR
 		    && DECL_P (tree_strip_any_location_wrapper
-					    (TREE_OPERAND (current.lhs, 0)))))
-	      || TREE_TYPE (current.lhs) == NULL_TREE
-	      || TREE_CODE (TREE_TYPE (current.lhs)) != BOOLEAN_TYPE))
+					    (TREE_OPERAND (not_lhs, 0)))))
+	      || TREE_TYPE (not_lhs) == NULL_TREE
+	      || TREE_CODE (TREE_TYPE (not_lhs)) != BOOLEAN_TYPE))
 	warn_logical_not_parentheses (current.loc, current.tree_type,
-				      current.lhs, maybe_constant_value (rhs));
+				      not_lhs, maybe_constant_value (rhs));
 
       if (warn_xor_used_as_pow
 	  && current.tree_type == BIT_XOR_EXPR
@@ -18134,6 +18144,10 @@ cp_parser_simple_declaration (cp_parser* parser,
   bool saw_declarator;
   location_t comma_loc = UNKNOWN_LOCATION;
   location_t init_loc = UNKNOWN_LOCATION;
+  /* Under -freflection, the local variables that the declarators declare,
+     while each declarator declares one.  */
+  auto_vec<tree, 4> reflection_vars;
+  bool reflection_vars_p = flag_reflection;
 
   if (maybe_range_for_decl)
     *maybe_range_for_decl = NULL_TREE;
@@ -18299,6 +18313,15 @@ cp_parser_simple_declaration (cp_parser* parser,
       if (cp_parser_error_occurred (parser))
 	goto error_out;
 
+      if (reflection_vars_p)
+	{
+	  if (VAR_P (decl) && DECL_FUNCTION_SCOPE_P (decl)
+	      && !DECL_EXTERNAL (decl))
+	    reflection_vars.safe_push (decl);
+	  else
+	    reflection_vars_p = false;
+	}
+
       if (auto_specifier_p && cxx_dialect >= cxx14)
 	{
 	  /* If the init-declarator-list contains more than one
@@ -18404,6 +18427,9 @@ cp_parser_simple_declaration (cp_parser* parser,
       function_definition_allowed_p = false;
     }
 
+  if (reflection_vars_p && reflection_vars.length () > 1)
+    reflection_record_declarators (reflection_vars);
+
   /* Issue an error message if no declarators are present, and the
      decl-specifier-seq does not itself declare a class or
      enumeration: [dcl.dcl]/3.  */
@@ -18418,7 +18444,18 @@ cp_parser_simple_declaration (cp_parser* parser,
 	       called via cp_parser_decl_specifier_seq, returns a class or
 	       an enumeration (c++/51786).  */
 	    decl_specifiers.type = NULL_TREE;
-	  shadow_tag (&decl_specifiers);
+	  tree type = shadow_tag (&decl_specifiers);
+	  /* Under -freflection, a declaration of a local class or
+	     enumeration with no declarators is a declaration statement.  */
+	  if (flag_reflection
+	      && type
+	      && declares_class_or_enum
+	      && at_function_scope_p ()
+	      && OVERLOAD_TYPE_P (type)
+	      && !ANON_AGGR_TYPE_P (type)
+	      && !LAMBDA_TYPE_P (type))
+	    add_stmt (reflection_declaration_marker
+		      (DECL_SOURCE_LOCATION (TYPE_MAIN_DECL (type))));
 	}
       /* Perform any deferred access checks.  */
       perform_deferred_access_checks (tf_warning_or_error);
@@ -24817,6 +24854,7 @@ cp_parser_using_declaration (cp_parser* parser,
   tree qscope;
   int oldcount = errorcount;
   cp_token *diag_token = NULL;
+  location_t start = cp_lexer_peek_token (parser->lexer)->location;
 
   if (access_declaration_p)
     {
@@ -24977,6 +25015,12 @@ cp_parser_using_declaration (cp_parser* parser,
   /* Look for the final `;'.  */
   cp_parser_require (parser, CPP_SEMICOLON, RT_SEMICOLON);
 
+  /* Under -freflection, a using-declaration at block scope is one
+     declaration statement, however many declarators it has.  */
+  if (flag_reflection && !access_declaration_p && at_function_scope_p ())
+    add_stmt (reflection_declaration_marker
+	      (make_location (start, start, input_location)));
+
   if (access_declaration_p && errorcount == oldcount)
     warning_at (diag_token->location, OPT_Wdeprecated,
 		"access declarations are deprecated "
@@ -25052,8 +25096,15 @@ cp_parser_using_enum (cp_parser *parser)
   /* A using-enum-declaration introduces the enumerator names of the named
      enumeration as if by a using-declaration for each enumerator.  */
   if (TREE_CODE (type) == ENUMERAL_TYPE)
-    for (tree v = TYPE_VALUES (type); v; v = TREE_CHAIN (v))
-      finish_using_decl (type, DECL_NAME (TREE_VALUE (v)));
+    {
+      for (tree v = TYPE_VALUES (type); v; v = TREE_CHAIN (v))
+	finish_using_decl (type, DECL_NAME (TREE_VALUE (v)));
+      /* Under -freflection, one at block scope is one declaration
+	 statement.  */
+      if (flag_reflection && at_function_scope_p ())
+	add_stmt (reflection_declaration_marker
+		  (make_location (start, start, end)));
+    }
 }
 
 /* Parse an alias-declaration.
@@ -25215,6 +25266,7 @@ cp_parser_using_directive (cp_parser* parser)
       return;
     }
 
+  location_t start = cp_lexer_peek_token (parser->lexer)->location;
   /* Look for the `using' keyword.  */
   cp_parser_require_keyword (parser, RID_USING, RT_USING);
   /* And the `namespace' keyword.  */
@@ -25244,6 +25296,12 @@ cp_parser_using_directive (cp_parser* parser)
 
   /* Look for the final `;'.  */
   cp_parser_require (parser, CPP_SEMICOLON, RT_SEMICOLON);
+
+  /* Under -freflection, a using-directive at block scope is a
+     declaration statement.  */
+  if (flag_reflection && at_function_scope_p ())
+    add_stmt (reflection_declaration_marker
+	      (make_location (start, start, input_location)));
 }
 
 /* Parse a string literal or constant expression yielding a string.

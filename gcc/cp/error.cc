@@ -2410,9 +2410,9 @@ dump_expr_init_vec (cxx_pretty_printer *pp, vec<constructor_elt, va_gc> *v,
 /* We've gotten an indirect REFERENCE (an OBJ_TYPE_REF) to a virtual
    function.  Resolve it to a close relative -- in the sense of static
    type -- variant being overridden.  That is close to what was written in
-   the source code.  Subroutine of dump_expr.  */
+   the source code.  Subroutine of dump_expr; also used by reflect.cc.  */
 
-static tree
+tree
 resolve_virtual_fun_from_obj_type_ref (tree ref)
 {
   tree obj_type = TREE_TYPE (OBJ_TYPE_REF_TOKEN (ref));

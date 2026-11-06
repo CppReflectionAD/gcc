@@ -13380,10 +13380,18 @@ finish_static_assert (tree condition, tree message, location_t location,
       return;
     }
 
+  /* Under -freflection, a static_assert-declaration or consteval block at
+     block scope is a declaration statement.  One in a template that
+     isn't deferred gives the pattern a marker, which tsubst_stmt copies,
+     and one that is gives the instantiation a marker here.  */
+  bool marker_p = flag_reflection && !member_p && at_function_scope_p ();
+
   /* Evaluate the consteval { }.  This must be done only once.  */
   if (consteval_block_p)
     {
       cxx_constant_value (condition);
+      if (marker_p)
+	add_stmt (reflection_declaration_marker (location));
       return;
     }
 
@@ -13393,8 +13401,11 @@ finish_static_assert (tree condition, tree message, location_t location,
 				       /*manifestly_const_eval=*/true);
 
   if (TREE_CODE (condition) == INTEGER_CST && !integer_zerop (condition))
-    /* Do nothing; the condition is satisfied. */
-    ;
+    {
+      /* The condition is satisfied.  */
+      if (marker_p)
+	add_stmt (reflection_declaration_marker (location));
+    }
   else
     {
       iloc_sentinel ils (location);
