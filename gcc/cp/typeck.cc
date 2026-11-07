@@ -4372,6 +4372,8 @@ cp_build_array_ref (location_t loc, tree array, tree idx,
     if (first)
       ret = build2_loc (loc, COMPOUND_EXPR, TREE_TYPE (ret), first, ret);
     ret = cp_build_indirect_ref (loc, ret, RO_ARRAY_INDEXING, complain);
+    if (flag_reflection && INDIRECT_REF_P (ret))
+      INDIRECT_REF_SUBSCRIPT_P (ret) = 1;
     protected_set_expr_location (ret, loc);
     if (non_lvalue)
       ret = non_lvalue_loc (loc, ret);

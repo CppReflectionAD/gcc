@@ -2553,6 +2553,9 @@ call_fndecl (tree call)
   return cp_get_callee_fndecl_nofold (call);
 }
 
+static bool subscript_p (tree);
+static bool pointer_plus_parts (tree, tree *, tree *);
+
 static tree
 eval_operator_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		  bool *non_constant_p, tree *jump_target, tree ret_type,
@@ -2594,6 +2597,14 @@ eval_operator_of (location_t loc, const constexpr_ctx *ctx, tree r,
     return build_int_cst (ret_type, meta_operators[1][OVL_OP_NOP_EXPR]);
 
   if (code == NON_LVALUE_EXPR)
+    return build_int_cst (ret_type, meta_operators[0][OVL_OP_PLUS_EXPR]);
+
+  /* `p[i]' and `p + i' on a pointer, which are built as pointer
+     arithmetic.  */
+  tree base, index;
+  if (subscript_p (r))
+    return build_int_cst (ret_type, meta_operators[0][OVL_OP_ARRAY_REF]);
+  if (pointer_plus_parts (r, &base, &index))
     return build_int_cst (ret_type, meta_operators[0][OVL_OP_PLUS_EXPR]);
 
   if (code < MAX_TREE_CODES && !REFERENCE_REF_P (r))
@@ -5311,6 +5322,123 @@ unwrap_call_expr (tree r)
   return NULL_TREE;
 }
 
+/* Strip the integral conversions from I, an index: it was converted to
+   sizetype for the byte offset.  */
+
+static tree
+strip_index_conversions (tree i)
+{
+  while (CONVERT_EXPR_P (i) && INTEGRAL_TYPE_P (TREE_TYPE (i))
+	 && INTEGRAL_TYPE_P (TREE_TYPE (TREE_OPERAND (i, 0))))
+    i = TREE_OPERAND (i, 0);
+  return i;
+}
+
+/* The index I for which OFF, the byte offset of a POINTER_PLUS_EXPR, is I
+   times SIZE, the size of the element, or NULL_TREE.  The front end builds
+   `p + i' with the offset `(sizetype) i * size', and folds a constant term
+   of I out of the multiplication: `p + (j - 1)' has the offset
+   `(sizetype) j * 4 - 4'.  */
+
+static tree
+offset_index (tree off, tree size)
+{
+  STRIP_NOPS (off);
+  if (TREE_CODE (off) == INTEGER_CST)
+    {
+      offset_int v = wi::sext (wi::to_offset (off),
+			       TYPE_PRECISION (TREE_TYPE (off)));
+      offset_int s = wi::to_offset (size);
+      if (!wi::multiple_of_p (v, s, SIGNED))
+	return NULL_TREE;
+      return wide_int_to_tree (ptrdiff_type_node, wi::sdiv_trunc (v, s));
+    }
+  if (TREE_CODE (off) == MULT_EXPR)
+    {
+      tree a = TREE_OPERAND (off, 0), b = TREE_OPERAND (off, 1);
+      if (TREE_CODE (b) == INTEGER_CST && tree_int_cst_equal (b, size))
+	return strip_index_conversions (a);
+      if (TREE_CODE (a) == INTEGER_CST && tree_int_cst_equal (a, size))
+	return strip_index_conversions (b);
+    }
+  if ((TREE_CODE (off) == PLUS_EXPR || TREE_CODE (off) == MINUS_EXPR)
+      && TREE_CODE (TREE_OPERAND (off, 1)) == INTEGER_CST)
+    {
+      tree i = offset_index (TREE_OPERAND (off, 0), size);
+      tree k = offset_index (TREE_OPERAND (off, 1), size);
+      if (i && k && INTEGRAL_TYPE_P (TREE_TYPE (i)))
+	{
+	  /* As the source had it: `j - 1', not `j + -1'.  */
+	  tree_code code = TREE_CODE (off);
+	  if (tree_int_cst_sgn (k) < 0)
+	    {
+	      code = code == PLUS_EXPR ? MINUS_EXPR : PLUS_EXPR;
+	      k = wide_int_to_tree (ptrdiff_type_node,
+				    -wi::to_offset (k));
+	    }
+	  tree type = TREE_TYPE (i);
+	  return build2 (code, type, i, fold_convert (type, k));
+	}
+    }
+  if (integer_onep (size))
+    return strip_index_conversions (off);
+  return NULL_TREE;
+}
+
+/* If R is `p + i' for a pointer P and an integer I, as a POINTER_PLUS_EXPR
+   whose offset is I times the size of what P points to, set *BASE to P and
+   *INDEX to I and return true.  */
+
+static bool
+pointer_plus_parts (tree r, tree *base, tree *index)
+{
+  if (!r || TREE_CODE (r) != POINTER_PLUS_EXPR)
+    return false;
+  tree p = TREE_OPERAND (r, 0);
+  if (!TYPE_PTR_P (TREE_TYPE (p)))
+    return false;
+  tree size = TYPE_SIZE_UNIT (TREE_TYPE (TREE_TYPE (p)));
+  if (!size || TREE_CODE (size) != INTEGER_CST || integer_zerop (size))
+    return false;
+  tree i = offset_index (TREE_OPERAND (r, 1), size);
+  if (!i)
+    return false;
+  *base = p;
+  *index = i;
+  return true;
+}
+
+/* If R is a subscript of a pointer, `p[i]', set *BASE to P and *INDEX to I
+   and return true.  */
+
+static bool
+subscript_parts (tree r, tree *base, tree *index)
+{
+  if (!r || !INDIRECT_REF_P (r) || !INDIRECT_REF_SUBSCRIPT_P (r))
+    return false;
+  tree op = TREE_OPERAND (r, 0);
+  if (pointer_plus_parts (op, base, index))
+    return true;
+  /* `p[0]': adding the zero offset folds to P, as a non-lvalue.  */
+  bool folded = TREE_CODE (op) == NON_LVALUE_EXPR;
+  if (folded)
+    op = TREE_OPERAND (op, 0);
+  if ((folded || DECL_P (op)) && TYPE_PTR_P (TREE_TYPE (op)))
+    {
+      *base = op;
+      *index = build_int_cst (ptrdiff_type_node, 0);
+      return true;
+    }
+  return false;
+}
+
+static bool
+subscript_p (tree r)
+{
+  tree base, index;
+  return subscript_parts (r, &base, &index);
+}
+
 static tree
 eval_is_unary_operator (tree r)
 {
@@ -5322,7 +5450,7 @@ eval_is_unary_operator (tree r)
 	  || code == TRUTH_NOT_EXPR
 	  || code == UNARY_PLUS_EXPR
 	  || code == ADDR_EXPR
-	  || code == INDIRECT_REF
+	  || (code == INDIRECT_REF && !subscript_p (r))
 	  || code == PREINCREMENT_EXPR
 	  || code == PREDECREMENT_EXPR
 	  || code == POSTINCREMENT_EXPR
@@ -5350,7 +5478,8 @@ eval_is_binary_operator (tree r)
 	  || code == TRUTH_XOR_EXPR
 	  || code == MEMBER_REF
 	  || code == DOTSTAR_EXPR
-	  || code == ARRAY_REF))
+	  || code == ARRAY_REF
+	  || subscript_p (r)))
     return boolean_true_node;
   return boolean_false_node;
 }
@@ -5571,8 +5700,19 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
     }
 
   tree_code code = TREE_CODE (r);
+  tree base, index;
   if (CONSTANT_CLASS_P (r) || DECL_P (r))
     return get_vector_of_info_elts (nullptr);
+  else if (subscript_parts (r, &base, &index)
+	   || pointer_plus_parts (r, &base, &index))
+    {
+      /* `p[i]' or `p + i': the pointer and the index, not the byte
+	 offset that the pointer arithmetic adds.  */
+      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+			      get_reflection_raw_expression (loc, base));
+      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+			      get_reflection_raw_expression (loc, index));
+    }
   else if (code == AGGR_INIT_EXPR && AGGR_INIT_VIA_CTOR_P (r))
     {
       /* Skip the artificial `this` pointer argument of the constructor.  */

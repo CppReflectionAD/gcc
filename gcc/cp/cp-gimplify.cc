@@ -3699,6 +3699,11 @@ cp_fold (tree x, fold_flags_t flags)
 	    }
 	}
 
+      /* A rebuilt subscript is still one.  */
+      if (code == INDIRECT_REF && x != org_x && INDIRECT_REF_P (x)
+	  && INDIRECT_REF_SUBSCRIPT_P (org_x))
+	INDIRECT_REF_SUBSCRIPT_P (x) = 1;
+
       gcc_assert (TREE_CODE (x) != COND_EXPR
 		  || !VOID_TYPE_P (TREE_TYPE (TREE_OPERAND (x, 0))));
       break;
