@@ -352,6 +352,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     consteval info true_expression_of(info);
     consteval info false_expression_of(info);
 
+    // An if statement. condition_of, true_expression_of and
+    // false_expression_of accept one too, giving its condition and branches.
+    // A loop is lowered before reflection sees it, to labels, gotos and an
+    // `if (cond) goto body; else goto exit;`, which is an if statement too.
+    consteval bool is_if_statement(info);
+
     template<typename _Container>
     consteval auto define_static_array(_Container&& __c) {
       return __c;
