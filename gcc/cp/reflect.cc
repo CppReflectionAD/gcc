@@ -3412,7 +3412,11 @@ eval_body_of (location_t loc, const constexpr_ctx *ctx, tree r,
   r = maybe_get_first_fn (r);
   tree body = DECL_SAVED_TREE (r);
 
-  if (TREE_CODE (body) != BIND_EXPR && TREE_CODE (body) != STATEMENT_LIST)
+  /* A block in the function's block is the whole body if it's the only
+     statement, since pop_stmt_list takes the one statement out of a list,
+     so give it a block too.  */
+  if ((TREE_CODE (body) != BIND_EXPR && TREE_CODE (body) != STATEMENT_LIST)
+      || (TREE_CODE (body) == BIND_EXPR && BIND_EXPR_REFLECT_BLOCK (body)))
     {
       body = build3_loc (DECL_SOURCE_LOCATION (r), BIND_EXPR, void_type_node,
 			 NULL_TREE, body, NULL_TREE);
@@ -4015,8 +4019,14 @@ eval_statements_of (location_t loc, const constexpr_ctx *ctx, tree r,
 
   if (r && (TREE_CODE (r) == BIND_EXPR || TREE_CODE (r) == STATEMENT_LIST))
     {
-      while (r && TREE_CODE (r) == BIND_EXPR)
-	r = BIND_EXPR_BODY (r);
+      /* A block in this one is one of its statements.  */
+      bool outer = true;
+      while (r && TREE_CODE (r) == BIND_EXPR
+	     && (outer || !BIND_EXPR_REFLECT_BLOCK (r)))
+	{
+	  r = BIND_EXPR_BODY (r);
+	  outer = false;
+	}
       if (r && TREE_CODE (r) == STATEMENT_LIST)
 	{
 	  for (tree stmt : tsi_range (r))

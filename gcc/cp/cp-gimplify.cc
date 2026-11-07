@@ -847,6 +847,22 @@ cp_gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
       ret = GS_OK;
       break;
 
+    case BIND_EXPR:
+      /* Under -freflection, do_poplevel kept a block that declares nothing
+	 for std::meta::statements_of.  It is just its statements now, as
+	 without -freflection, so that the gimplifier, and so
+	 -Wimplicit-fallthrough, see the same code.  */
+      if (BIND_EXPR_REFLECT_BLOCK (*expr_p)
+	  && !BIND_EXPR_VARS (*expr_p)
+	  && !BIND_EXPR_BLOCK (*expr_p))
+	{
+	  *expr_p = BIND_EXPR_BODY (*expr_p);
+	  ret = GS_OK;
+	}
+      else
+	ret = (enum gimplify_status) c_gimplify_expr (expr_p, pre_p, post_p);
+      break;
+
     case EMPTY_CLASS_EXPR:
       /* We create an empty CONSTRUCTOR with RECORD_TYPE.  */
       *expr_p = build_constructor (TREE_TYPE (*expr_p), NULL);

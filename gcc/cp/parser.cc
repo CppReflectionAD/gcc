@@ -14582,7 +14582,16 @@ cp_parser_statement (cp_parser* parser, tree in_statement_expr,
   else if (token->type == CPP_OPEN_BRACE)
     {
       std_attrs = process_stmt_hotness_attribute (std_attrs, attrs_loc);
-      statement = cp_parser_compound_statement (parser, NULL, BCS_NORMAL, false);
+      /* Under -freflection, a block in a block is a statement of it even
+	 if it declares nothing.  */
+      int bcs_flags = BCS_NORMAL;
+      if (flag_reflection
+	  && in_compound
+	  && !in_statement_expr
+	  && at_function_scope_p ())
+	bcs_flags |= BCS_REFLECT_BLOCK;
+      statement = cp_parser_compound_statement (parser, NULL, bcs_flags,
+						false);
     }
   /* CPP_PRAGMA is a #pragma inside a function body, which constitutes
      a statement all its own.  */
