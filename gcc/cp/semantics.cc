@@ -2136,6 +2136,13 @@ finish_handler_parms (tree decl, tree handler)
   else
     {
       type = expand_start_catch_block (decl);
+      /* Under -freflection, keep the variable in HANDLER_PARMS, as a
+	 template does, for exception_declaration_of.  */
+      if (flag_reflection && decl && decl != error_mark_node)
+	{
+	  HANDLER_PARMS (handler) = decl;
+	  reflection_record_catch_parameter (decl, handler);
+	}
       if (warn_catch_value
 	  && type != NULL_TREE
 	  && type != error_mark_node

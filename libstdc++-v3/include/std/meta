@@ -367,6 +367,19 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     consteval bool is_label_statement(info);
     consteval info label_of(info);
 
+    // A try block and its handlers. try_body_of and handler_body_of are
+    // compound statements, even for a block of one statement, and leave out
+    // what the implementation adds to a handler to begin and end the catch.
+    // exception_declaration_of is the handler's variable (which may have no
+    // identifier, as in `catch (int)`), or a null reflection for
+    // `catch (...)`.
+    consteval bool is_try_statement(info);
+    consteval info try_body_of(info);
+    consteval vector<info> handlers_of(info);
+    consteval bool is_handler(info);
+    consteval info handler_body_of(info);
+    consteval info exception_declaration_of(info);
+
     template<typename _Container>
     consteval auto define_static_array(_Container&& __c) {
       return __c;
