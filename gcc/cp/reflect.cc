@@ -4940,22 +4940,60 @@ eval_is_conditional_operator (tree r)
   return boolean_false_node;
 }
 
-/* Navigate to one operand of a conditional expression.  Unlike
-   eval_is_conditional_operator, this accepts a void-typed COND_EXPR too, so
-   that the branches of a genericized `if` statement can be walked as well.  */
+/* Return the if statement R represents, or NULL_TREE.  That is an IF_STMT,
+   or the void-typed COND_EXPR that genericization turns one into, including
+   the `if (cond) goto body; else goto exit;` a lowered loop ends with.  A
+   statement-level `c ? f () : g ();` is still inside its EXPR_STMT, so it
+   is not an if statement.  */
+
+static tree
+get_if_statement (tree r)
+{
+  while (r && TREE_CODE (r) == CLEANUP_POINT_EXPR)
+    r = TREE_OPERAND (r, 0);
+  if (!r)
+    return NULL_TREE;
+  if (TREE_CODE (r) == IF_STMT)
+    return r;
+  if (TREE_CODE (r) == COND_EXPR
+      && (!TREE_TYPE (r) || VOID_TYPE_P (TREE_TYPE (r))))
+    return r;
+  return NULL_TREE;
+}
+
+static tree
+eval_is_if_statement (tree r)
+{
+  if (get_if_statement (r))
+    return boolean_true_node;
+  return boolean_false_node;
+}
+
+/* Navigate to one operand of a conditional expression or an if statement.
+   Unlike eval_is_conditional_operator, this accepts a void-typed COND_EXPR
+   too, so that the branches of a genericized `if` statement can be walked as
+   well, and an IF_STMT that has not been genericized.  */
 
 static tree
 eval_conditional_operand (location_t loc, const constexpr_ctx *ctx, tree r,
 			  int opno, bool *non_constant_p, tree *jump_target,
 			  tree fun)
 {
-  tree cond = unwrap_statement_wrappers (r);
-  if (!cond || TREE_CODE (cond) != COND_EXPR)
-    return throw_exception (loc, ctx,
-			    "reflection does not represent a conditional "
-			    "expression", fun, non_constant_p, jump_target);
-
-  tree op = TREE_OPERAND (cond, opno);
+  tree op;
+  if (tree if_stmt = get_if_statement (r);
+      if_stmt && TREE_CODE (if_stmt) == IF_STMT)
+    op = (opno == 0 ? IF_COND (if_stmt)
+	  : opno == 1 ? THEN_CLAUSE (if_stmt) : ELSE_CLAUSE (if_stmt));
+  else
+    {
+      tree cond = unwrap_statement_wrappers (r);
+      if (!cond || TREE_CODE (cond) != COND_EXPR)
+	return throw_exception (loc, ctx,
+				"reflection does not represent a conditional "
+				"expression or an if statement", fun,
+				non_constant_p, jump_target);
+      op = TREE_OPERAND (cond, opno);
+    }
 
   /* In the GNU `c ?: b` extension the condition doubles as the true branch,
      which GCC models by evaluating it once into a SAVE_EXPR referenced from
@@ -10538,6 +10576,8 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
     case METAFN_FALSE_EXPRESSION_OF:
       return eval_false_expression_of (loc, ctx, h, non_constant_p,
 				       jump_target, fun);
+    case METAFN_IS_IF_STATEMENT:
+      return eval_is_if_statement (h);
     case METAFN_IS_ACCESSIBLE:
       return eval_is_accessible (loc, ctx, h, kind, expr, call,
 				 non_constant_p, jump_target, fun);
