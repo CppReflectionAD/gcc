@@ -4372,6 +4372,8 @@ cp_build_array_ref (location_t loc, tree array, tree idx,
     if (first)
       ret = build2_loc (loc, COMPOUND_EXPR, TREE_TYPE (ret), first, ret);
     ret = cp_build_indirect_ref (loc, ret, RO_ARRAY_INDEXING, complain);
+    if (flag_reflection && INDIRECT_REF_P (ret))
+      INDIRECT_REF_SUBSCRIPT_P (ret) = 1;
     protected_set_expr_location (ret, loc);
     if (non_lvalue)
       ret = non_lvalue_loc (loc, ret);
@@ -7197,8 +7199,12 @@ cp_pointer_int_sum (location_t loc, enum tree_code resultcode, tree ptrop,
      pointer_int_sum() anyway.  */
   complete_type (TREE_TYPE (res_type));
 
-  return pointer_int_sum (loc, resultcode, ptrop,
-			  intop, complain & tf_warning_or_error);
+  tree ret = pointer_int_sum (loc, resultcode, ptrop,
+			      intop, complain & tf_warning_or_error);
+  if (flag_reflection && resultcode == MINUS_EXPR
+      && ret && TREE_CODE (ret) == POINTER_PLUS_EXPR)
+    POINTER_PLUS_SUBTRACT_P (ret) = 1;
+  return ret;
 }
 
 /* Return a tree for the difference of pointers OP0 and OP1.
