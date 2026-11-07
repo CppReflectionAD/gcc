@@ -3413,8 +3413,11 @@ eval_body_of (location_t loc, const constexpr_ctx *ctx, tree r,
   tree body = DECL_SAVED_TREE (r);
 
   if (TREE_CODE (body) != BIND_EXPR && TREE_CODE (body) != STATEMENT_LIST)
-    body = build3_loc (DECL_SOURCE_LOCATION (r), BIND_EXPR, void_type_node,
-		       NULL_TREE, body, NULL_TREE);
+    {
+      body = build3_loc (DECL_SOURCE_LOCATION (r), BIND_EXPR, void_type_node,
+			 NULL_TREE, body, NULL_TREE);
+      BIND_EXPR_REFLECT_BODY (body) = 1;
+    }
 
   return get_reflection_raw (loc, body, REFLECT_UNDEF);
 }
@@ -11363,6 +11366,19 @@ compare_reflections (tree lhs, tree rhs)
     return TREE_VALUE (lhs) == TREE_VALUE (rhs);
   else if (lkind == REFLECT_BASE)
     return lhs == rhs;
+  else if (eval_is_compound_statement (lhs) == boolean_true_node
+	   && eval_is_compound_statement (rhs) == boolean_true_node)
+    {
+      /* cp_tree_equal can't compare statement lists or BLOCKs, and two
+	 blocks that are alike are still two statements, so these are equal
+	 only if they reflect the same block.  body_of gives a new BIND_EXPR
+	 each time for a body that isn't a block, so two of those are equal
+	 if they hold the same body.  */
+      if (TREE_CODE (lhs) == BIND_EXPR && BIND_EXPR_REFLECT_BODY (lhs)
+	  && TREE_CODE (rhs) == BIND_EXPR && BIND_EXPR_REFLECT_BODY (rhs))
+	return BIND_EXPR_BODY (lhs) == BIND_EXPR_BODY (rhs);
+      return lhs == rhs;
+    }
   else if (TYPE_P (lhs) && TYPE_P (rhs))
     {
       /* Given

@@ -538,6 +538,7 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       SPLICE_EXPR_TARGS_P (in SPLICE_EXPR)
    5: IDENTIFIER_VIRTUAL_P (in IDENTIFIER_NODE)
       FUNCTION_RVALUE_QUALIFIED (in FUNCTION_TYPE, METHOD_TYPE)
+      BIND_EXPR_REFLECT_BODY (in BIND_EXPR)
       CALL_EXPR_REVERSE_ARGS (in CALL_EXPR, AGGR_INIT_EXPR)
       CONSTRUCTOR_PLACEHOLDER_BOUNDARY (in CONSTRUCTOR)
       OVL_EXPORT_P (in OVERLOAD)
@@ -778,6 +779,9 @@ typedef struct ptrmem_cst * ptrmem_cst_t;
 /* Used to mark the block around the member initializers and cleanups.  */
 #define BIND_EXPR_BODY_BLOCK(NODE) \
   TREE_LANG_FLAG_3 (BIND_EXPR_CHECK (NODE))
+/* This BIND_EXPR is from body_of, for a function body that isn't a block.  */
+#define BIND_EXPR_REFLECT_BODY(NODE) \
+  TREE_LANG_FLAG_5 (BIND_EXPR_CHECK (NODE))
 #define FUNCTION_NEEDS_BODY_BLOCK(NODE) \
   (DECL_CONSTRUCTOR_P (NODE) || DECL_DESTRUCTOR_P (NODE) \
    || LAMBDA_FUNCTION_P (NODE))
