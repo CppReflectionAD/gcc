@@ -358,6 +358,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     // `if (cond) goto body; else goto exit;`, which is an if statement too.
     consteval bool is_if_statement(info);
 
+    // A goto statement, and a label as statements_of lists it: `L:` is an
+    // element of its own, followed by the statement it labels. label_of gives
+    // the label a goto jumps to, or the one a label statement defines; two
+    // reflections of the same label compare equal. A loop's lowered labels
+    // have no identifier.
+    consteval bool is_goto_statement(info);
+    consteval bool is_label_statement(info);
+    consteval info label_of(info);
+
     template<typename _Container>
     consteval auto define_static_array(_Container&& __c) {
       return __c;

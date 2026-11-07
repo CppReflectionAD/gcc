@@ -3934,7 +3934,11 @@ append_block_statement (location_t loc, tree stmt,
 	  stmt = EXPR_STMT_EXPR (stmt);
 	}
     }
-  if (!stmt || TREE_CODE (stmt) == DEBUG_BEGIN_STMT)
+  /* The front end puts a PREDICT_EXPR before a goto, which isn't in the
+     source.  */
+  if (!stmt
+      || TREE_CODE (stmt) == DEBUG_BEGIN_STMT
+      || TREE_CODE (stmt) == PREDICT_EXPR)
     return;
 
   /* A local variable whose type has a non-trivial destructor makes the rest
@@ -4185,6 +4189,7 @@ eval_is_statement (tree r)
     case DECL_EXPR:
     case LABEL_EXPR:
     case CASE_LABEL_EXPR:
+    case GOTO_EXPR:
       return boolean_true_node;
     case COND_EXPR:
       return (!TREE_TYPE (r) || VOID_TYPE_P (TREE_TYPE (r)))
@@ -4969,6 +4974,85 @@ eval_is_if_statement (tree r)
   return boolean_false_node;
 }
 
+/* Return the GOTO_EXPR or LABEL_EXPR, as CODE says, that R represents, or
+   NULL_TREE.  */
+
+static tree
+get_jump_statement (tree r, tree_code code)
+{
+  while (r && TREE_CODE (r) == CLEANUP_POINT_EXPR)
+    r = TREE_OPERAND (r, 0);
+  if (r && TREE_CODE (r) == code)
+    return r;
+  return NULL_TREE;
+}
+
+static tree
+eval_is_goto_statement (tree r)
+{
+  if (get_jump_statement (r, GOTO_EXPR))
+    return boolean_true_node;
+  return boolean_false_node;
+}
+
+static tree
+eval_is_label_statement (tree r)
+{
+  if (get_jump_statement (r, LABEL_EXPR))
+    return boolean_true_node;
+  return boolean_false_node;
+}
+
+/* Process std::meta::label_of.
+   Returns: The label that the goto statement R jumps to, or that the label
+   statement R defines.
+   Throws: meta::exception if R is neither, or is a computed goto.  */
+
+static tree
+eval_label_of (location_t loc, const constexpr_ctx *ctx, tree r,
+	       bool *non_constant_p, tree *jump_target, tree fun)
+{
+  tree label = NULL_TREE;
+  if (tree g = get_jump_statement (r, GOTO_EXPR))
+    {
+      label = GOTO_DESTINATION (g);
+      if (!label || TREE_CODE (label) != LABEL_DECL)
+	return throw_exception (loc, ctx,
+				"a computed goto has no label", fun,
+				non_constant_p, jump_target);
+    }
+  else if (tree l = get_jump_statement (r, LABEL_EXPR))
+    label = LABEL_EXPR_LABEL (l);
+  else
+    return throw_exception (loc, ctx,
+			    "reflection does not represent a goto or a label "
+			    "statement", fun, non_constant_p, jump_target);
+  return get_reflection_raw (loc, label, REFLECT_UNDEF);
+}
+
+/* An if's branch that is just `goto L;` is a STATEMENT_LIST of the goto and
+   the PREDICT_EXPR the front end puts before it.  Return the goto in that
+   case, otherwise OP.  */
+
+static tree
+strip_goto_prediction (tree op)
+{
+  if (!op || TREE_CODE (op) != STATEMENT_LIST)
+    return op;
+  tree only = NULL_TREE;
+  bool predicted = false;
+  for (tree s : tsi_range (op))
+    if (TREE_CODE (s) == PREDICT_EXPR)
+      predicted = true;
+    else if (TREE_CODE (s) == DEBUG_BEGIN_STMT)
+      continue;
+    else if (only)
+      return op;
+    else
+      only = s;
+  return predicted && only ? only : op;
+}
+
 /* Navigate to one operand of a conditional expression or an if statement.
    Unlike eval_is_conditional_operator, this accepts a void-typed COND_EXPR
    too, so that the branches of a genericized `if` statement can be walked as
@@ -5000,6 +5084,7 @@ eval_conditional_operand (location_t loc, const constexpr_ctx *ctx, tree r,
      both positions.  Report the written operand rather than the placeholder.  */
   if (op && TREE_CODE (op) == SAVE_EXPR)
     op = TREE_OPERAND (op, 0);
+  op = strip_goto_prediction (op);
 
   if (!op)
     return throw_exception (loc, ctx,
@@ -5772,6 +5857,7 @@ eval_has_identifier (tree r, reflect_kind kind)
     }
   if (eval_is_enumerator (r) == boolean_true_node
       || TREE_CODE (r) == FIELD_DECL
+      || TREE_CODE (r) == LABEL_DECL
       || (TREE_CODE (r) == NAMESPACE_DECL && r != global_namespace))
     return boolean_true_node;
   if (kind == REFLECT_DATA_MEMBER_SPEC && TREE_VEC_ELT (r, 1))
@@ -10578,6 +10664,12 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
 				       jump_target, fun);
     case METAFN_IS_IF_STATEMENT:
       return eval_is_if_statement (h);
+    case METAFN_IS_GOTO_STATEMENT:
+      return eval_is_goto_statement (h);
+    case METAFN_IS_LABEL_STATEMENT:
+      return eval_is_label_statement (h);
+    case METAFN_LABEL_OF:
+      return eval_label_of (loc, ctx, h, non_constant_p, jump_target, fun);
     case METAFN_IS_ACCESSIBLE:
       return eval_is_accessible (loc, ctx, h, kind, expr, call,
 				 non_constant_p, jump_target, fun);
