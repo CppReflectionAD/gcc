@@ -52,7 +52,7 @@ jobs:
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential flex bison libgmp-dev libmpfr-dev libmpc-dev texinfo zlib1g-dev dejagnu
+          sudo apt-get install -y build-essential flex bison libgmp-dev libmpfr-dev libmpc-dev texinfo zlib1g-dev gperf dejagnu
 
       - name: Configure GCC
         run: |
