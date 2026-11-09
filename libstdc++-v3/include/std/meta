@@ -352,6 +352,34 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     consteval info true_expression_of(info);
     consteval info false_expression_of(info);
 
+    // An if statement. condition_of, true_expression_of and
+    // false_expression_of accept one too, giving its condition and branches.
+    // A loop is lowered before reflection sees it, to labels, gotos and an
+    // `if (cond) goto body; else goto exit;`, which is an if statement too.
+    consteval bool is_if_statement(info);
+
+    // A goto statement, and a label as statements_of lists it: `L:` is an
+    // element of its own, followed by the statement it labels. label_of gives
+    // the label a goto jumps to, or the one a label statement defines; two
+    // reflections of the same label compare equal. A loop's lowered labels
+    // have no identifier.
+    consteval bool is_goto_statement(info);
+    consteval bool is_label_statement(info);
+    consteval info label_of(info);
+
+    // A try block and its handlers. try_body_of and handler_body_of are
+    // compound statements, even for a block of one statement, and leave out
+    // what the implementation adds to a handler to begin and end the catch.
+    // exception_declaration_of is the handler's variable (which may have no
+    // identifier, as in `catch (int)`), or a null reflection for
+    // `catch (...)`.
+    consteval bool is_try_statement(info);
+    consteval info try_body_of(info);
+    consteval vector<info> handlers_of(info);
+    consteval bool is_handler(info);
+    consteval info handler_body_of(info);
+    consteval info exception_declaration_of(info);
+
     template<typename _Container>
     consteval auto define_static_array(_Container&& __c) {
       return __c;

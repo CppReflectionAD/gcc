@@ -463,6 +463,8 @@ expand_start_catch_block (tree decl)
       cp_finish_decl (exp, init, /*init_const_expr=*/false,
 		      NULL_TREE, LOOKUP_ONLYCONVERTING);
       DECL_REGISTER (exp) = 1;
+      if (flag_reflection)
+	reflection_record_catch_parameter (exp, NULL_TREE);
       initialize_handler_parm (decl, exp);
     }
 

@@ -2553,6 +2553,9 @@ call_fndecl (tree call)
   return cp_get_callee_fndecl_nofold (call);
 }
 
+static bool subscript_p (tree);
+static bool pointer_plus_parts (tree, tree *, tree *);
+
 static tree
 eval_operator_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		  bool *non_constant_p, tree *jump_target, tree ret_type,
@@ -2594,6 +2597,14 @@ eval_operator_of (location_t loc, const constexpr_ctx *ctx, tree r,
     return build_int_cst (ret_type, meta_operators[1][OVL_OP_NOP_EXPR]);
 
   if (code == NON_LVALUE_EXPR)
+    return build_int_cst (ret_type, meta_operators[0][OVL_OP_PLUS_EXPR]);
+
+  /* `p[i]' and `p + i' on a pointer, which are built as pointer
+     arithmetic.  */
+  tree base, index;
+  if (subscript_p (r))
+    return build_int_cst (ret_type, meta_operators[0][OVL_OP_ARRAY_REF]);
+  if (pointer_plus_parts (r, &base, &index))
     return build_int_cst (ret_type, meta_operators[0][OVL_OP_PLUS_EXPR]);
 
   if (code < MAX_TREE_CODES && !REFERENCE_REF_P (r))
@@ -3537,6 +3548,27 @@ reflection_record_constructor_init (tree var, tree call)
   split_initializers->put (var, init);
 }
 
+/* What expand_start_catch_block declares at the start of a handler's body:
+   the variable of the catch clause's exception-declaration, mapped to its
+   HANDLER, and the temporary that holds the result of __cxa_begin_catch,
+   mapped to NULL_TREE.  statements_of leaves out the declarations of both;
+   exception_declaration_of reports the variable, which finish_handler_parms
+   also keeps in HANDLER_PARMS under -freflection.  */
+
+static GTY(()) decl_tree_map *catch_parameters;
+
+/* Record VAR, declared for HANDLER as above, under -freflection.  */
+
+void
+reflection_record_catch_parameter (tree var, tree handler)
+{
+  if (!VAR_P (var))
+    return;
+  if (!catch_parameters)
+    catch_parameters = decl_tree_map::create_ggc (16);
+  catch_parameters->put (var, handler);
+}
+
 /* A static local with a dynamic initializer is split too: expand_static_init
    declares it without an initializer and initializes it in an `if' on its
    guard variable, after the declaration.  Map each guard variable to its
@@ -3909,6 +3941,38 @@ static tree eval_is_return_statement (tree);
 static tree eval_is_declaration_statement (tree);
 static tree declared_var_of_stmt (tree);
 
+/* True if T, an expression statement's expression, calls __cxa_begin_catch
+   or __cxa_get_exception_ptr, possibly storing the result.  */
+
+static bool
+eh_begin_catch_call_p (tree t)
+{
+  while (t && (CONVERT_EXPR_P (t)
+	       || TREE_CODE (t) == MODIFY_EXPR
+	       || TREE_CODE (t) == INIT_EXPR))
+    t = (CONVERT_EXPR_P (t) ? TREE_OPERAND (t, 0) : TREE_OPERAND (t, 1));
+  if (!t || TREE_CODE (t) != CALL_EXPR)
+    return false;
+  tree fn = get_callee_fndecl (t);
+  return (fn && DECL_NAME (fn)
+	  && (id_equal (DECL_NAME (fn), "__cxa_begin_catch")
+	      || id_equal (DECL_NAME (fn), "__cxa_get_exception_ptr")));
+}
+
+/* True if STMT is part of what expand_start_catch_block puts at the start of
+   a handler's body, which isn't in the source: the call of
+   __cxa_begin_catch, the declaration of the temporary that holds its result,
+   or the declaration of the catch clause's variable, which
+   exception_declaration_of reports instead.  */
+
+static bool
+catch_bookkeeping_p (tree stmt)
+{
+  if (TREE_CODE (stmt) == DECL_EXPR)
+    return catch_parameters && catch_parameters->get (DECL_EXPR_DECL (stmt));
+  return eh_begin_catch_call_p (stmt);
+}
+
 /* Append STMT, a statement of a block, to ELTS the way statements_of
    reports it.  */
 
@@ -3934,7 +3998,12 @@ append_block_statement (location_t loc, tree stmt,
 	  stmt = EXPR_STMT_EXPR (stmt);
 	}
     }
-  if (!stmt || TREE_CODE (stmt) == DEBUG_BEGIN_STMT)
+  /* The front end puts a PREDICT_EXPR before a goto, which isn't in the
+     source.  */
+  if (!stmt
+      || TREE_CODE (stmt) == DEBUG_BEGIN_STMT
+      || TREE_CODE (stmt) == PREDICT_EXPR
+      || catch_bookkeeping_p (stmt))
     return;
 
   /* A local variable whose type has a non-trivial destructor makes the rest
@@ -4185,6 +4254,7 @@ eval_is_statement (tree r)
     case DECL_EXPR:
     case LABEL_EXPR:
     case CASE_LABEL_EXPR:
+    case GOTO_EXPR:
       return boolean_true_node;
     case COND_EXPR:
       return (!TREE_TYPE (r) || VOID_TYPE_P (TREE_TYPE (r)))
@@ -4975,28 +5045,268 @@ eval_is_conditional_operator (tree r)
   return boolean_false_node;
 }
 
-/* Navigate to one operand of a conditional expression.  Unlike
-   eval_is_conditional_operator, this accepts a void-typed COND_EXPR too, so
-   that the branches of a genericized `if` statement can be walked as well.  */
+/* Return the if statement R represents, or NULL_TREE.  That is an IF_STMT,
+   or the void-typed COND_EXPR that genericization turns one into, including
+   the `if (cond) goto body; else goto exit;` a lowered loop ends with.  A
+   statement-level `c ? f () : g ();` is still inside its EXPR_STMT, so it
+   is not an if statement.  */
+
+static tree
+get_if_statement (tree r)
+{
+  while (r && TREE_CODE (r) == CLEANUP_POINT_EXPR)
+    r = TREE_OPERAND (r, 0);
+  if (!r)
+    return NULL_TREE;
+  if (TREE_CODE (r) == IF_STMT)
+    return r;
+  if (TREE_CODE (r) == COND_EXPR
+      && (!TREE_TYPE (r) || VOID_TYPE_P (TREE_TYPE (r))))
+    return r;
+  return NULL_TREE;
+}
+
+static tree
+eval_is_if_statement (tree r)
+{
+  if (get_if_statement (r))
+    return boolean_true_node;
+  return boolean_false_node;
+}
+
+/* Return the GOTO_EXPR or LABEL_EXPR, as CODE says, that R represents, or
+   NULL_TREE.  */
+
+static tree
+get_jump_statement (tree r, tree_code code)
+{
+  while (r && TREE_CODE (r) == CLEANUP_POINT_EXPR)
+    r = TREE_OPERAND (r, 0);
+  if (r && TREE_CODE (r) == code)
+    return r;
+  return NULL_TREE;
+}
+
+static tree
+eval_is_goto_statement (tree r)
+{
+  if (get_jump_statement (r, GOTO_EXPR))
+    return boolean_true_node;
+  return boolean_false_node;
+}
+
+static tree
+eval_is_label_statement (tree r)
+{
+  if (get_jump_statement (r, LABEL_EXPR))
+    return boolean_true_node;
+  return boolean_false_node;
+}
+
+/* Process std::meta::label_of.
+   Returns: The label that the goto statement R jumps to, or that the label
+   statement R defines.
+   Throws: meta::exception if R is neither, or is a computed goto.  */
+
+static tree
+eval_label_of (location_t loc, const constexpr_ctx *ctx, tree r,
+	       bool *non_constant_p, tree *jump_target, tree fun)
+{
+  tree label = NULL_TREE;
+  if (tree g = get_jump_statement (r, GOTO_EXPR))
+    {
+      label = GOTO_DESTINATION (g);
+      if (!label || TREE_CODE (label) != LABEL_DECL)
+	return throw_exception (loc, ctx,
+				"a computed goto has no label", fun,
+				non_constant_p, jump_target);
+    }
+  else if (tree l = get_jump_statement (r, LABEL_EXPR))
+    label = LABEL_EXPR_LABEL (l);
+  else
+    return throw_exception (loc, ctx,
+			    "reflection does not represent a goto or a label "
+			    "statement", fun, non_constant_p, jump_target);
+  return get_reflection_raw (loc, label, REFLECT_UNDEF);
+}
+
+/* Return the try block R represents, or NULL_TREE.  A TRY_BLOCK that
+   CLEANUP_P says runs a cleanup isn't one.  */
+
+static tree
+get_try_statement (tree r)
+{
+  while (r && TREE_CODE (r) == CLEANUP_POINT_EXPR)
+    r = TREE_OPERAND (r, 0);
+  if (r && TREE_CODE (r) == TRY_BLOCK && !CLEANUP_P (r))
+    return r;
+  return NULL_TREE;
+}
+
+static tree
+eval_is_try_statement (tree r)
+{
+  if (get_try_statement (r))
+    return boolean_true_node;
+  return boolean_false_node;
+}
+
+static tree
+eval_is_handler (tree r)
+{
+  if (r && TREE_CODE (r) == HANDLER)
+    return boolean_true_node;
+  return boolean_false_node;
+}
+
+/* A reflection of BLOCK, the compound-statement of a try block or handler,
+   as a compound statement.  A block of one statement is that statement, so
+   wrap it, as body_of does.  */
+
+static tree
+get_compound_statement_reflection (location_t loc, tree block)
+{
+  if (!block || (TREE_CODE (block) != BIND_EXPR
+		 && TREE_CODE (block) != STATEMENT_LIST))
+    block = build3_loc (loc, BIND_EXPR, void_type_node, NULL_TREE, block,
+			NULL_TREE);
+  return get_reflection_raw (loc, block, REFLECT_UNDEF);
+}
+
+/* Process std::meta::try_body_of.
+   Returns: The compound-statement of the try block R.
+   Throws: meta::exception if R is not a try block.  */
+
+static tree
+eval_try_body_of (location_t loc, const constexpr_ctx *ctx, tree r,
+		  bool *non_constant_p, tree *jump_target, tree fun)
+{
+  tree t = get_try_statement (r);
+  if (!t)
+    return throw_exception (loc, ctx,
+			    "reflection does not represent a try block", fun,
+			    non_constant_p, jump_target);
+  return get_compound_statement_reflection (loc, TRY_STMTS (t));
+}
+
+/* Process std::meta::handlers_of.
+   Returns: The handlers of the try block R, in order.
+   Throws: meta::exception if R is not a try block.  */
+
+static tree
+eval_handlers_of (location_t loc, const constexpr_ctx *ctx, tree r,
+		  bool *non_constant_p, tree *jump_target, tree fun)
+{
+  tree t = get_try_statement (r);
+  if (!t)
+    return throw_exception (loc, ctx,
+			    "reflection does not represent a try block", fun,
+			    non_constant_p, jump_target);
+  vec<constructor_elt, va_gc> *elts = nullptr;
+  tree handlers = TRY_HANDLERS (t);
+  if (handlers && TREE_CODE (handlers) == STATEMENT_LIST)
+    {
+      for (tree h : tsi_range (handlers))
+	if (TREE_CODE (h) == HANDLER)
+	  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+				  get_reflection_raw (loc, h, REFLECT_UNDEF));
+    }
+  else if (handlers && TREE_CODE (handlers) == HANDLER)
+    CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+			    get_reflection_raw (loc, handlers, REFLECT_UNDEF));
+  return get_vector_of_info_elts (elts);
+}
+
+/* Process std::meta::handler_body_of.
+   Returns: The compound-statement of the handler R.
+   Throws: meta::exception if R is not a handler.  */
+
+static tree
+eval_handler_body_of (location_t loc, const constexpr_ctx *ctx, tree r,
+		      bool *non_constant_p, tree *jump_target, tree fun)
+{
+  if (eval_is_handler (r) != boolean_true_node)
+    return throw_exception (loc, ctx,
+			    "reflection does not represent a handler", fun,
+			    non_constant_p, jump_target);
+  return get_compound_statement_reflection (loc, HANDLER_BODY (r));
+}
+
+/* Process std::meta::exception_declaration_of.
+   Returns: The variable that the exception-declaration of the handler R
+   declares, or a null reflection for `catch (...)`.
+   Throws: meta::exception if R is not a handler.  */
+
+static tree
+eval_exception_declaration_of (location_t loc, const constexpr_ctx *ctx,
+			       tree r, bool *non_constant_p,
+			       tree *jump_target, tree fun)
+{
+  if (eval_is_handler (r) != boolean_true_node)
+    return throw_exception (loc, ctx,
+			    "reflection does not represent a handler", fun,
+			    non_constant_p, jump_target);
+  tree var = HANDLER_PARMS (r);
+  if (!var)
+    return get_null_reflection ();
+  return get_reflection_raw (loc, var, REFLECT_UNDEF);
+}
+
+/* An if's branch that is just `goto L;` is a STATEMENT_LIST of the goto and
+   the PREDICT_EXPR the front end puts before it.  Return the goto in that
+   case, otherwise OP.  */
+
+static tree
+strip_goto_prediction (tree op)
+{
+  if (!op || TREE_CODE (op) != STATEMENT_LIST)
+    return op;
+  tree only = NULL_TREE;
+  bool predicted = false;
+  for (tree s : tsi_range (op))
+    if (TREE_CODE (s) == PREDICT_EXPR)
+      predicted = true;
+    else if (TREE_CODE (s) == DEBUG_BEGIN_STMT)
+      continue;
+    else if (only)
+      return op;
+    else
+      only = s;
+  return predicted && only ? only : op;
+}
+
+/* Navigate to one operand of a conditional expression or an if statement.
+   Unlike eval_is_conditional_operator, this accepts a void-typed COND_EXPR
+   too, so that the branches of a genericized `if` statement can be walked as
+   well, and an IF_STMT that has not been genericized.  */
 
 static tree
 eval_conditional_operand (location_t loc, const constexpr_ctx *ctx, tree r,
 			  int opno, bool *non_constant_p, tree *jump_target,
 			  tree fun)
 {
-  tree cond = unwrap_statement_wrappers (r);
-  if (!cond || TREE_CODE (cond) != COND_EXPR)
-    return throw_exception (loc, ctx,
-			    "reflection does not represent a conditional "
-			    "expression", fun, non_constant_p, jump_target);
-
-  tree op = TREE_OPERAND (cond, opno);
+  tree op;
+  if (tree if_stmt = get_if_statement (r);
+      if_stmt && TREE_CODE (if_stmt) == IF_STMT)
+    op = (opno == 0 ? IF_COND (if_stmt)
+	  : opno == 1 ? THEN_CLAUSE (if_stmt) : ELSE_CLAUSE (if_stmt));
+  else
+    {
+      tree cond = unwrap_statement_wrappers (r);
+      if (!cond || TREE_CODE (cond) != COND_EXPR)
+	return throw_exception (loc, ctx,
+				"reflection does not represent a conditional "
+				"expression or an if statement", fun,
+				non_constant_p, jump_target);
+      op = TREE_OPERAND (cond, opno);
+    }
 
   /* In the GNU `c ?: b` extension the condition doubles as the true branch,
      which GCC models by evaluating it once into a SAVE_EXPR referenced from
      both positions.  Report the written operand rather than the placeholder.  */
   if (op && TREE_CODE (op) == SAVE_EXPR)
     op = TREE_OPERAND (op, 0);
+  op = strip_goto_prediction (op);
 
   if (!op)
     return throw_exception (loc, ctx,
@@ -5047,6 +5357,123 @@ unwrap_call_expr (tree r)
   return NULL_TREE;
 }
 
+/* Strip the integral conversions from I, an index: it was converted to
+   sizetype for the byte offset.  */
+
+static tree
+strip_index_conversions (tree i)
+{
+  while (CONVERT_EXPR_P (i) && INTEGRAL_TYPE_P (TREE_TYPE (i))
+	 && INTEGRAL_TYPE_P (TREE_TYPE (TREE_OPERAND (i, 0))))
+    i = TREE_OPERAND (i, 0);
+  return i;
+}
+
+/* The index I for which OFF, the byte offset of a POINTER_PLUS_EXPR, is I
+   times SIZE, the size of the element, or NULL_TREE.  The front end builds
+   `p + i' with the offset `(sizetype) i * size', and folds a constant term
+   of I out of the multiplication: `p + (j - 1)' has the offset
+   `(sizetype) j * 4 - 4'.  */
+
+static tree
+offset_index (tree off, tree size)
+{
+  STRIP_NOPS (off);
+  if (TREE_CODE (off) == INTEGER_CST)
+    {
+      offset_int v = wi::sext (wi::to_offset (off),
+			       TYPE_PRECISION (TREE_TYPE (off)));
+      offset_int s = wi::to_offset (size);
+      if (!wi::multiple_of_p (v, s, SIGNED))
+	return NULL_TREE;
+      return wide_int_to_tree (ptrdiff_type_node, wi::sdiv_trunc (v, s));
+    }
+  if (TREE_CODE (off) == MULT_EXPR)
+    {
+      tree a = TREE_OPERAND (off, 0), b = TREE_OPERAND (off, 1);
+      if (TREE_CODE (b) == INTEGER_CST && tree_int_cst_equal (b, size))
+	return strip_index_conversions (a);
+      if (TREE_CODE (a) == INTEGER_CST && tree_int_cst_equal (a, size))
+	return strip_index_conversions (b);
+    }
+  if ((TREE_CODE (off) == PLUS_EXPR || TREE_CODE (off) == MINUS_EXPR)
+      && TREE_CODE (TREE_OPERAND (off, 1)) == INTEGER_CST)
+    {
+      tree i = offset_index (TREE_OPERAND (off, 0), size);
+      tree k = offset_index (TREE_OPERAND (off, 1), size);
+      if (i && k && INTEGRAL_TYPE_P (TREE_TYPE (i)))
+	{
+	  /* As the source had it: `j - 1', not `j + -1'.  */
+	  tree_code code = TREE_CODE (off);
+	  if (tree_int_cst_sgn (k) < 0)
+	    {
+	      code = code == PLUS_EXPR ? MINUS_EXPR : PLUS_EXPR;
+	      k = wide_int_to_tree (ptrdiff_type_node,
+				    -wi::to_offset (k));
+	    }
+	  tree type = TREE_TYPE (i);
+	  return build2 (code, type, i, fold_convert (type, k));
+	}
+    }
+  if (integer_onep (size))
+    return strip_index_conversions (off);
+  return NULL_TREE;
+}
+
+/* If R is `p + i' for a pointer P and an integer I, as a POINTER_PLUS_EXPR
+   whose offset is I times the size of what P points to, set *BASE to P and
+   *INDEX to I and return true.  */
+
+static bool
+pointer_plus_parts (tree r, tree *base, tree *index)
+{
+  if (!r || TREE_CODE (r) != POINTER_PLUS_EXPR)
+    return false;
+  tree p = TREE_OPERAND (r, 0);
+  if (!TYPE_PTR_P (TREE_TYPE (p)))
+    return false;
+  tree size = TYPE_SIZE_UNIT (TREE_TYPE (TREE_TYPE (p)));
+  if (!size || TREE_CODE (size) != INTEGER_CST || integer_zerop (size))
+    return false;
+  tree i = offset_index (TREE_OPERAND (r, 1), size);
+  if (!i)
+    return false;
+  *base = p;
+  *index = i;
+  return true;
+}
+
+/* If R is a subscript of a pointer, `p[i]', set *BASE to P and *INDEX to I
+   and return true.  */
+
+static bool
+subscript_parts (tree r, tree *base, tree *index)
+{
+  if (!r || !INDIRECT_REF_P (r) || !INDIRECT_REF_SUBSCRIPT_P (r))
+    return false;
+  tree op = TREE_OPERAND (r, 0);
+  if (pointer_plus_parts (op, base, index))
+    return true;
+  /* `p[0]': adding the zero offset folds to P, as a non-lvalue.  */
+  bool folded = TREE_CODE (op) == NON_LVALUE_EXPR;
+  if (folded)
+    op = TREE_OPERAND (op, 0);
+  if ((folded || DECL_P (op)) && TYPE_PTR_P (TREE_TYPE (op)))
+    {
+      *base = op;
+      *index = build_int_cst (ptrdiff_type_node, 0);
+      return true;
+    }
+  return false;
+}
+
+static bool
+subscript_p (tree r)
+{
+  tree base, index;
+  return subscript_parts (r, &base, &index);
+}
+
 static tree
 eval_is_unary_operator (tree r)
 {
@@ -5058,7 +5485,7 @@ eval_is_unary_operator (tree r)
 	  || code == TRUTH_NOT_EXPR
 	  || code == UNARY_PLUS_EXPR
 	  || code == ADDR_EXPR
-	  || code == INDIRECT_REF
+	  || (code == INDIRECT_REF && !subscript_p (r))
 	  || code == PREINCREMENT_EXPR
 	  || code == PREDECREMENT_EXPR
 	  || code == POSTINCREMENT_EXPR
@@ -5086,7 +5513,8 @@ eval_is_binary_operator (tree r)
 	  || code == TRUTH_XOR_EXPR
 	  || code == MEMBER_REF
 	  || code == DOTSTAR_EXPR
-	  || code == ARRAY_REF))
+	  || code == ARRAY_REF
+	  || subscript_p (r)))
     return boolean_true_node;
   return boolean_false_node;
 }
@@ -5315,8 +5743,19 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
     }
 
   tree_code code = TREE_CODE (r);
+  tree base, index;
   if (CONSTANT_CLASS_P (r) || DECL_P (r))
     return get_vector_of_info_elts (nullptr);
+  else if (subscript_parts (r, &base, &index)
+	   || pointer_plus_parts (r, &base, &index))
+    {
+      /* `p[i]' or `p + i': the pointer and the index, not the byte
+	 offset that the pointer arithmetic adds.  */
+      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+			      get_reflection_raw_expression (loc, base));
+      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+			      get_reflection_raw_expression (loc, index));
+    }
   else if (code == AGGR_INIT_EXPR && AGGR_INIT_VIA_CTOR_P (r))
     {
       /* Skip the artificial `this` pointer argument of the constructor.  */
@@ -5779,6 +6218,7 @@ eval_has_identifier (tree r, reflect_kind kind)
     }
   if (eval_is_enumerator (r) == boolean_true_node
       || TREE_CODE (r) == FIELD_DECL
+      || TREE_CODE (r) == LABEL_DECL
       || (TREE_CODE (r) == NAMESPACE_DECL && r != global_namespace))
     return boolean_true_node;
   if (kind == REFLECT_DATA_MEMBER_SPEC && TREE_VEC_ELT (r, 1))
@@ -10583,6 +11023,28 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
     case METAFN_FALSE_EXPRESSION_OF:
       return eval_false_expression_of (loc, ctx, h, non_constant_p,
 				       jump_target, fun);
+    case METAFN_IS_IF_STATEMENT:
+      return eval_is_if_statement (h);
+    case METAFN_IS_GOTO_STATEMENT:
+      return eval_is_goto_statement (h);
+    case METAFN_IS_LABEL_STATEMENT:
+      return eval_is_label_statement (h);
+    case METAFN_LABEL_OF:
+      return eval_label_of (loc, ctx, h, non_constant_p, jump_target, fun);
+    case METAFN_IS_TRY_STATEMENT:
+      return eval_is_try_statement (h);
+    case METAFN_TRY_BODY_OF:
+      return eval_try_body_of (loc, ctx, h, non_constant_p, jump_target, fun);
+    case METAFN_HANDLERS_OF:
+      return eval_handlers_of (loc, ctx, h, non_constant_p, jump_target, fun);
+    case METAFN_IS_HANDLER:
+      return eval_is_handler (h);
+    case METAFN_HANDLER_BODY_OF:
+      return eval_handler_body_of (loc, ctx, h, non_constant_p, jump_target,
+				   fun);
+    case METAFN_EXCEPTION_DECLARATION_OF:
+      return eval_exception_declaration_of (loc, ctx, h, non_constant_p,
+					    jump_target, fun);
     case METAFN_IS_ACCESSIBLE:
       return eval_is_accessible (loc, ctx, h, kind, expr, call,
 				 non_constant_p, jump_target, fun);
