@@ -3784,6 +3784,9 @@ cp_fold (tree x, fold_flags_t flags)
 	      if (code == INIT_EXPR && op1 != TREE_OPERAND (x, 1))
 		set_target_expr_eliding (op1);
 	      x = build2_loc (loc, code, TREE_TYPE (x), op0, op1);
+	      if (code == MODIFY_EXPR)
+		set_modify_expr_compound_code
+		  (x, modify_expr_compound_code (org_x));
 	    }
 	  break;
 	}
@@ -3829,6 +3832,11 @@ cp_fold (tree x, fold_flags_t flags)
 	      copy_warning (x, org_x);
 	    }
 	}
+
+      /* A rebuilt compound assignment, which is `a = a op b', is still
+	 `a op= b' for reflection.  */
+      if (code == MODIFY_EXPR && x != org_x && TREE_CODE (x) == MODIFY_EXPR)
+	set_modify_expr_compound_code (x, modify_expr_compound_code (org_x));
 
       /* This is only needed for -Wnonnull-compare and only if
 	 TREE_NO_WARNING (org_x), but to avoid that option affecting code

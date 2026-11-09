@@ -2590,6 +2590,12 @@ eval_operator_of (location_t loc, const constexpr_ctx *ctx, tree r,
   else if (code == TRUTH_XOR_EXPR)
     code = BIT_XOR_EXPR;
 
+  if (code == MODIFY_EXPR)
+    {
+      tree_code op = modify_expr_compound_code (r);
+      if (op != ERROR_MARK)
+	return build_int_cst (ret_type, meta_operators[1][ovl_op_mapping[op]]);
+    }
   if (code == MODIFY_EXPR || code == INIT_EXPR)
     return build_int_cst (ret_type, meta_operators[1][OVL_OP_NOP_EXPR]);
 
@@ -5264,6 +5270,87 @@ eval_declaration_of (location_t loc, const constexpr_ctx *ctx, tree r,
 			  fun, non_constant_p, jump_target);
 }
 
+/* Return `b' as written in the compound assignment `a op= b' whose
+   MODIFY_EXPR is R.  cp_build_modify_expr builds it as `a = a op b', with
+   conversions to and from the type of the operation, and with `b' first
+   evaluated into a temporary if it has side effects.  Return NULL_TREE if
+   the operation can't be found.  */
+
+static tree
+compound_assignment_rhs (tree r)
+{
+  tree op = TREE_OPERAND (r, 1);
+  tree init = NULL_TREE;
+  for (;;)
+    {
+      op = tree_strip_any_location_wrapper (op);
+      if (CONVERT_EXPR_P (op)
+	  || TREE_CODE (op) == NON_LVALUE_EXPR
+	  || TREE_CODE (op) == FLOAT_EXPR
+	  || TREE_CODE (op) == FIX_TRUNC_EXPR)
+	op = TREE_OPERAND (op, 0);
+      else if (TREE_CODE (op) == COMPOUND_EXPR)
+	{
+	  init = TREE_OPERAND (op, 0);
+	  op = TREE_OPERAND (op, 1);
+	}
+      else
+	break;
+    }
+  if (!BINARY_CLASS_P (op))
+    return NULL_TREE;
+  tree b = TREE_OPERAND (op, 1);
+  if (init && TREE_CODE (init) == TARGET_EXPR)
+    {
+      tree slot = b;
+      while (CONVERT_EXPR_P (slot)
+	     || TREE_CODE (slot) == FLOAT_EXPR
+	     || TREE_CODE (slot) == FIX_TRUNC_EXPR)
+	slot = TREE_OPERAND (slot, 0);
+      if (slot == TARGET_EXPR_SLOT (init) && TARGET_EXPR_INITIAL (init))
+	return TARGET_EXPR_INITIAL (init);
+    }
+  return b;
+}
+
+/* Return the lvalue T with the SAVE_EXPRs that cp_stabilize_reference
+   added removed.  For a compound assignment `a op= b', it evaluates the
+   parts of `a' with side effects once, so `f () += b' has the left operand
+   `*SAVE_EXPR <f ()>' and `p[i++] += b' has `*SAVE_EXPR <p + i++ * 8>'.
+   The source has neither: the operand is `f ()' or `p[i++]', as for a
+   simple assignment.  */
+
+static tree
+unsave_lvalue (tree t)
+{
+  if (TREE_CODE (t) == SAVE_EXPR)
+    return unsave_lvalue (TREE_OPERAND (t, 0));
+  int n;
+  if (TREE_CODE (t) == ARRAY_REF || TREE_CODE (t) == ARRAY_RANGE_REF)
+    n = 2;
+  else if (INDIRECT_REF_P (t)
+	   || TREE_CODE (t) == COMPONENT_REF
+	   || TREE_CODE (t) == BIT_FIELD_REF
+	   || CONVERT_EXPR_P (t)
+	   || TREE_CODE (t) == NON_LVALUE_EXPR)
+    n = 1;
+  else
+    return t;
+  tree copy = t;
+  for (int i = 0; i < n; ++i)
+    if (tree op = TREE_OPERAND (t, i))
+      {
+	tree unsaved = unsave_lvalue (op);
+	if (unsaved != op)
+	  {
+	    if (copy == t)
+	      copy = copy_node (t);
+	    TREE_OPERAND (copy, i) = unsaved;
+	  }
+      }
+  return copy;
+}
+
 static tree
 eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		  bool *non_constant_p, tree *jump_target, tree fun)
@@ -5373,6 +5460,18 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
 	if (val)
 	  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
 				  get_reflection_raw_expression (loc, val));
+    }
+  else if (code == MODIFY_EXPR
+	   && modify_expr_compound_code (r) != ERROR_MARK
+	   && compound_assignment_rhs (r))
+    {
+      /* `a op= b' has the operands `a' and `b', not `a' and `a op b'.  */
+      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+			      get_reflection_raw_expression
+				(loc, unsave_lvalue (TREE_OPERAND (r, 0))));
+      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+			      get_reflection_raw_expression
+				(loc, compound_assignment_rhs (r)));
     }
   else if (CONVERT_EXPR_P (r)
 	   && TYPE_REF_P (TREE_TYPE (r))
