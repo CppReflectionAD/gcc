@@ -20326,8 +20326,10 @@ tsubst_stmt (tree t, tree args, tsubst_flags_t complain, tree in_decl)
       if (BIND_EXPR_BODY_BLOCK (t))
 	stmt = begin_function_body ();
       else
-	stmt = begin_compound_stmt (BIND_EXPR_TRY_BLOCK (t)
-				    ? BCS_TRY_BLOCK : 0);
+	stmt = begin_compound_stmt ((BIND_EXPR_TRY_BLOCK (t)
+				     ? BCS_TRY_BLOCK : 0)
+				    | (BIND_EXPR_REFLECT_BLOCK (t)
+				       ? BCS_REFLECT_BLOCK : 0));
 
       RECUR (BIND_EXPR_BODY (t));
 

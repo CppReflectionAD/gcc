@@ -3804,6 +3804,14 @@ operand_compare::operand_equal_p (tree type0, const_tree arg0,
 	    return OP_SAME (0);
 	  return false;
 
+	case BIND_EXPR:
+	  /* A block with no variables and no BLOCK is just its body.  */
+	  if ((flags & OEP_LEXICOGRAPHIC)
+	      && !BIND_EXPR_VARS (arg0) && !BIND_EXPR_BLOCK (arg0)
+	      && !BIND_EXPR_VARS (arg1) && !BIND_EXPR_BLOCK (arg1))
+	    return OP_SAME (1);
+	  return false;
+
 	case OBJ_TYPE_REF:
 	/* Virtual table reference.  */
 	if (!operand_equal_p (OBJ_TYPE_REF_EXPR (arg0),
