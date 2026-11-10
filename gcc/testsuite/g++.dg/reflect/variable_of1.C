@@ -128,12 +128,7 @@ consteval bool
 qux (int a)
 {
   return baz (a + 1, ^^a, parameters_of (^^qux)[0],
-  // TODO: This doesn't work yet, I think we want to check
-  // whether DECL_CONTEXT of the PARM_DECL is current_function_decl
-  // or any of the ctx->call->fundef->decl on the constexpr evaluation
-  // stack.  But currently we only have access to the innermost.
-	      // variable_of (parameters_of (^^qux)[0]));
-	      ^^a);
+	      variable_of (parameters_of (^^qux)[0]));
 }
 
 static_assert (qux (42));
