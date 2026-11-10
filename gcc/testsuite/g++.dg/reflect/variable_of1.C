@@ -67,6 +67,8 @@ bar (long, const T f, int g[2], T &)
 {
 }
 
+void declared_only (int);
+
 void
 foo (int a, const long b, T c, int d[4], T &e)
 {
@@ -80,10 +82,11 @@ foo (int a, const long b, T c, int d[4], T &e)
   static_assert (has_variable_of (parameters_of (^^foo)[2]));
   static_assert (has_variable_of (parameters_of (^^foo)[3]));
   static_assert (has_variable_of (parameters_of (^^foo)[4]));
-  static_assert (!has_variable_of (parameters_of (^^bar)[0]));
-  static_assert (!has_variable_of (parameters_of (^^bar)[1]));
-  static_assert (!has_variable_of (parameters_of (^^bar)[2]));
-  static_assert (!has_variable_of (parameters_of (^^bar)[3]));
+  static_assert (has_variable_of (parameters_of (^^bar)[0]));
+  static_assert (has_variable_of (parameters_of (^^bar)[1]));
+  static_assert (has_variable_of (parameters_of (^^bar)[2]));
+  static_assert (has_variable_of (parameters_of (^^bar)[3]));
+  static_assert (!has_variable_of (parameters_of (^^declared_only)[0]));
   static_assert (variable_of (parameters_of (^^foo)[0]) == ^^a);
   static_assert (variable_of (parameters_of (^^foo)[1]) == ^^b);
   static_assert (variable_of (parameters_of (^^foo)[2]) == ^^c);
@@ -113,11 +116,11 @@ baz (int a, info b, info c, info d)
   if (b == parameters_of (^^baz)[1])
     return false;
 
-  // variable can be accessed only in innermost scope
-  try { variable_of (c); return false; }
-  catch (exception) {}
-  try { variable_of (parameters_of (^^baz)[1]); return false; } 
-  catch (exception) {}
+  // As an extension, variable_of works outside the function's body.
+  if (variable_of (c) != b)
+    return false;
+  if (variable_of (parameters_of (^^baz)[1]) != ^^b)
+    return false;
   return true;
 }
 
