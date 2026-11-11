@@ -114,6 +114,14 @@ get_reflection_raw (location_t loc, tree t, reflect_kind kind = REFLECT_UNDEF)
 static tree
 get_reflection_raw_expression (location_t loc, tree t)
 {
+  /* convert_from_reference wraps a use of a variable or parameter of
+     reference type in a dereference that isn't in the source.  The
+     id-expression already denotes the object the reference refers to, so it
+     is the operand, as for a variable that isn't a reference.  */
+  if (REFERENCE_REF_P (t)
+      && (VAR_P (TREE_OPERAND (t, 0))
+	  || TREE_CODE (TREE_OPERAND (t, 0)) == PARM_DECL))
+    t = TREE_OPERAND (t, 0);
   reflect_kind kind = (DECL_P (t) && !is_this_parameter (t)
 		       ? REFLECT_ID_EXPR : REFLECT_UNDEF);
   return get_reflection_raw (loc, t, kind);
@@ -4873,8 +4881,10 @@ binds_cancelled_deref_p (tree r)
 }
 
 /* True if R is a conversion.  That includes the dereference that
-   convert_from_reference puts around a use of a reference: it isn't a `*`
-   in the source but the lvalue the reference refers to.  Around a call
+   convert_from_reference puts around a use of a reference other than an
+   id-expression (which get_reflection_raw_expression reflects as the
+   id-expression), such as a reference member: it isn't a `*` in the source
+   but the lvalue the reference refers to.  Around a call
    returning a reference, as in `return std::max (x, y);`, the dereference
    is the call itself (see unwrap_call_expr), not a conversion of it.  */
 
