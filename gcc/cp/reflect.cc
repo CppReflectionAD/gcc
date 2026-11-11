@@ -11578,6 +11578,10 @@ compare_reflections (tree lhs, tree rhs)
 	return BIND_EXPR_BODY (lhs) == BIND_EXPR_BODY (rhs);
       return lhs == rhs;
     }
+  else if (TREE_CODE (lhs) == IF_STMT || TREE_CODE (rhs) == IF_STMT)
+    /* Likewise for the `if constexpr' that cp_genericize_r keeps under
+       -freflection: cp_tree_equal can't compare statements either.  */
+    return lhs == rhs;
   else if (TYPE_P (lhs) && TYPE_P (rhs))
     {
       /* Given
