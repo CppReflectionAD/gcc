@@ -9953,7 +9953,13 @@ maybe_nonzero_address (tree decl)
 	  = (folding_initializer
 	     ? symtab_node::get_create (decl)
 	     : symtab_node::get (decl)))
-	return symbol->nonzero_address ();
+	/* In C++ constant evaluation an object's address is never null, so
+	   answer as if -fdelete-null-pointer-checks were on: a codegen flag
+	   (implied, e.g., by -fsanitize=null) shouldn't change whether a
+	   constant expression is valid.  A weak declaration can still be
+	   null.  */
+	return symbol->nonzero_address (flag_delete_null_pointer_checks
+					|| folding_cxx_constexpr);
     }
   else if (folding_cxx_constexpr)
     /* Anything that doesn't go in the symtab has non-zero address.  */
