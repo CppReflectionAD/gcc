@@ -9886,6 +9886,48 @@ build_modify_expr (location_t location,
 			       tf_warning_or_error);
 }
 
+/* The operators of a compound assignment, which a MODIFY_EXPR numbers
+   from 1 in its compound code; 0 is a simple assignment.  */
+
+static const tree_code compound_assignment_codes[] = {
+  PLUS_EXPR, MINUS_EXPR, MULT_EXPR, TRUNC_DIV_EXPR, TRUNC_MOD_EXPR,
+  LSHIFT_EXPR, RSHIFT_EXPR, BIT_AND_EXPR, BIT_IOR_EXPR, BIT_XOR_EXPR
+};
+
+/* Return the code of `op' if the MODIFY_EXPR T is a compound assignment
+   `a op= b' built under -freflection, or ERROR_MARK otherwise.  */
+
+tree_code
+modify_expr_compound_code (const_tree t)
+{
+  gcc_checking_assert (TREE_CODE (t) == MODIFY_EXPR);
+  unsigned i = (TREE_LANG_FLAG_1 (t)
+		| TREE_LANG_FLAG_2 (t) << 1
+		| TREE_LANG_FLAG_3 (t) << 2
+		| TREE_LANG_FLAG_4 (t) << 3);
+  if (i == 0 || i > ARRAY_SIZE (compound_assignment_codes))
+    return ERROR_MARK;
+  return compound_assignment_codes[i - 1];
+}
+
+/* Record in the MODIFY_EXPR T that it is the compound assignment
+   `a op= b' with CODE the code of `op', or with ERROR_MARK, or any code
+   that isn't a compound assignment's, that it is a simple assignment.  */
+
+void
+set_modify_expr_compound_code (tree t, tree_code code)
+{
+  gcc_checking_assert (TREE_CODE (t) == MODIFY_EXPR);
+  unsigned i = 0;
+  for (unsigned j = 0; j < ARRAY_SIZE (compound_assignment_codes); ++j)
+    if (compound_assignment_codes[j] == code)
+      i = j + 1;
+  TREE_LANG_FLAG_1 (t) = i & 1;
+  TREE_LANG_FLAG_2 (t) = (i >> 1) & 1;
+  TREE_LANG_FLAG_3 (t) = (i >> 2) & 1;
+  TREE_LANG_FLAG_4 (t) = (i >> 3) & 1;
+}
+
 /* Build an assignment expression of lvalue LHS from value RHS.
    MODIFYCODE is the code for a binary operator that we use
    to combine the old value of LHS with RHS to get the new value.
@@ -9905,6 +9947,9 @@ cp_build_modify_expr (location_t loc, tree lhs, enum tree_code modifycode,
   tree olhs = lhs;
   tree olhstype = lhstype;
   bool plain_assign = (modifycode == NOP_EXPR);
+  /* The operator of a compound assignment, which becomes `a = a op b'.  */
+  tree_code compound_code
+    = (plain_assign || modifycode == INIT_EXPR) ? ERROR_MARK : modifycode;
   bool compound_side_effects_p = false;
   tree preeval = NULL_TREE;
 
@@ -10314,6 +10359,8 @@ cp_build_modify_expr (location_t loc, tree lhs, enum tree_code modifycode,
   TREE_SIDE_EFFECTS (result) = 1;
   if (!plain_assign)
     suppress_warning (result, OPT_Wparentheses);
+  if (flag_reflection && TREE_CODE (result) == MODIFY_EXPR)
+    set_modify_expr_compound_code (result, compound_code);
 
  ret:
   if (preeval)

@@ -114,6 +114,14 @@ get_reflection_raw (location_t loc, tree t, reflect_kind kind = REFLECT_UNDEF)
 static tree
 get_reflection_raw_expression (location_t loc, tree t)
 {
+  /* convert_from_reference wraps a use of a variable or parameter of
+     reference type in a dereference that isn't in the source.  The
+     id-expression already denotes the object the reference refers to, so it
+     is the operand, as for a variable that isn't a reference.  */
+  if (REFERENCE_REF_P (t)
+      && (VAR_P (TREE_OPERAND (t, 0))
+	  || TREE_CODE (TREE_OPERAND (t, 0)) == PARM_DECL))
+    t = TREE_OPERAND (t, 0);
   reflect_kind kind = (DECL_P (t) && !is_this_parameter (t)
 		       ? REFLECT_ID_EXPR : REFLECT_UNDEF);
   return get_reflection_raw (loc, t, kind);
@@ -2590,6 +2598,12 @@ eval_operator_of (location_t loc, const constexpr_ctx *ctx, tree r,
   else if (code == TRUTH_XOR_EXPR)
     code = BIT_XOR_EXPR;
 
+  if (code == MODIFY_EXPR)
+    {
+      tree_code op = modify_expr_compound_code (r);
+      if (op != ERROR_MARK)
+	return build_int_cst (ret_type, meta_operators[1][ovl_op_mapping[op]]);
+    }
   if (code == MODIFY_EXPR || code == INIT_EXPR)
     return build_int_cst (ret_type, meta_operators[1][OVL_OP_NOP_EXPR]);
 
@@ -3319,20 +3333,52 @@ eval_parameters_of (location_t loc, const constexpr_ctx *ctx, tree r,
    -- r represents a parameter of a function F and
    -- there is a point P in the evaluation context for which the innermost
       non-block scope enclosing P is the function parameter scope associated
-      with F.  */
+      with F.
+
+   As an extension (matching the clang fork), the second condition is
+   replaced by F having a definition, instantiating F if need be, so this
+   works outside F's body too.  That lets code that reflects F's body match
+   a use of a parameter, whose declaration_of is the definition's PARM_DECL,
+   against parameters_of (F), including the unnamed elements of an expanded
+   pack.  Splicing the result outside F is still rejected, as for any local
+   of F.  */
 
 static tree
 eval_variable_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		  reflect_kind kind, bool *non_constant_p, tree *jump_target,
 		  tree fun)
 {
-  if (eval_is_function_parameter (r, kind) == boolean_false_node
-      /* This doesn't consider the points corresponding to injected
-	 declarations, but that doesn't seem needed.  */
-      || DECL_CONTEXT (r) != current_function_decl)
-    return throw_exception (loc, ctx, "reflection does not represent "
-				      "parameter of current function",
+  if (eval_is_function_parameter (r, kind) == boolean_false_node)
+    return throw_exception (loc, ctx, "reflection does not represent a "
+				      "function parameter",
 			    fun, non_constant_p, jump_target);
+
+  tree fn = DECL_CONTEXT (r);
+  /* This doesn't consider the points corresponding to injected
+     declarations, but that doesn't seem needed.  */
+  if (fn != current_function_decl)
+    {
+      if (!DECL_SAVED_TREE (fn)
+	  && (DECL_TEMPLOID_INSTANTIATION (fn) || DECL_TEMPLATE_INFO (fn)))
+	{
+	  /* Don't collect garbage while the trees of the evaluation are live
+	     only on the stack.  */
+	  ++function_depth;
+	  instantiate_decl (fn, /*defer_ok=*/false,
+			    /*expl_inst_class_mem_p=*/false);
+	  --function_depth;
+	}
+      /* Until F is defined its parameters are those of a declaration, which
+	 the definition replaces (see maybe_update_function_parm), so no
+	 variable is known yet.  */
+      if (!DECL_SAVED_TREE (fn)
+	  && !DECL_DELETED_FN (fn)
+	  && !DECL_DEFAULTED_FN (fn))
+	return throw_exception (loc, ctx, "reflection does not represent a "
+					  "parameter of a function with a "
+					  "definition",
+				fun, non_constant_p, jump_target);
+    }
   r = maybe_update_function_parm (r);
   return get_reflection_raw (loc, r, REFLECT_UNDEF);
 }
@@ -3412,9 +3458,16 @@ eval_body_of (location_t loc, const constexpr_ctx *ctx, tree r,
   r = maybe_get_first_fn (r);
   tree body = DECL_SAVED_TREE (r);
 
-  if (TREE_CODE (body) != BIND_EXPR && TREE_CODE (body) != STATEMENT_LIST)
-    body = build3_loc (DECL_SOURCE_LOCATION (r), BIND_EXPR, void_type_node,
-		       NULL_TREE, body, NULL_TREE);
+  /* A block in the function's block is the whole body if it's the only
+     statement, since pop_stmt_list takes the one statement out of a list,
+     so give it a block too.  */
+  if ((TREE_CODE (body) != BIND_EXPR && TREE_CODE (body) != STATEMENT_LIST)
+      || (TREE_CODE (body) == BIND_EXPR && BIND_EXPR_REFLECT_BLOCK (body)))
+    {
+      body = build3_loc (DECL_SOURCE_LOCATION (r), BIND_EXPR, void_type_node,
+			 NULL_TREE, body, NULL_TREE);
+      BIND_EXPR_REFLECT_BODY (body) = 1;
+    }
 
   return get_reflection_raw (loc, body, REFLECT_UNDEF);
 }
@@ -3611,6 +3664,47 @@ reflection_declaration_marker_p (tree decl)
 	  && DECL_ARTIFICIAL (decl)
 	  && TREE_TYPE (decl) == void_type_node
 	  && !DECL_ORIGINAL_TYPE (decl));
+}
+
+/* A null statement is an expression statement with no expression
+   ([stmt.expr]), but the parser adds nothing to the block for one.  Under
+   -freflection, cp_parser_statement gives it a DECL_EXPR of a marker like
+   those above, whose type is const void so that it isn't taken for a
+   declaration.  */
+
+/* Return a DECL_EXPR of a new null statement marker at LOC.  */
+
+tree
+reflection_null_statement_marker (location_t loc)
+{
+  tree type = cp_build_qualified_type (void_type_node, TYPE_QUAL_CONST);
+  tree marker = build_decl (loc, TYPE_DECL, NULL_TREE, type);
+  DECL_ARTIFICIAL (marker) = 1;
+  DECL_IGNORED_P (marker) = 1;
+  DECL_CONTEXT (marker) = current_function_decl;
+  return build_stmt (loc, DECL_EXPR, marker);
+}
+
+/* Whether DECL is a null statement marker.  */
+
+bool
+reflection_null_statement_marker_p (tree decl)
+{
+  return (TREE_CODE (decl) == TYPE_DECL
+	  && !DECL_NAME (decl)
+	  && DECL_ARTIFICIAL (decl)
+	  && VOID_TYPE_P (TREE_TYPE (decl))
+	  && TYPE_QUALS (TREE_TYPE (decl)) == TYPE_QUAL_CONST
+	  && !DECL_ORIGINAL_TYPE (decl));
+}
+
+/* Whether R reflects a null statement.  */
+
+static bool
+null_statement_p (tree r)
+{
+  return (r && TREE_CODE (r) == DECL_EXPR
+	  && reflection_null_statement_marker_p (DECL_EXPR_DECL (r)));
 }
 
 /* A declaration with several declarators, as in `double a = x, b = a * a;`,
@@ -3971,8 +4065,14 @@ eval_statements_of (location_t loc, const constexpr_ctx *ctx, tree r,
 
   if (r && (TREE_CODE (r) == BIND_EXPR || TREE_CODE (r) == STATEMENT_LIST))
     {
-      while (r && TREE_CODE (r) == BIND_EXPR)
-	r = BIND_EXPR_BODY (r);
+      /* A block in this one is one of its statements.  */
+      bool outer = true;
+      while (r && TREE_CODE (r) == BIND_EXPR
+	     && (outer || !BIND_EXPR_REFLECT_BLOCK (r)))
+	{
+	  r = BIND_EXPR_BODY (r);
+	  outer = false;
+	}
       if (r && TREE_CODE (r) == STATEMENT_LIST)
 	{
 	  for (tree stmt : tsi_range (r))
@@ -4638,6 +4738,8 @@ eval_initializers_of (location_t loc, const constexpr_ctx *ctx, tree r,
 static tree
 eval_is_expression_statement (tree r)
 {
+  if (null_statement_p (r))
+    return boolean_true_node;
   if (!r
       || eval_is_compound_statement (r) == boolean_true_node
       || eval_is_declaration_statement (r) == boolean_true_node
@@ -4668,6 +4770,11 @@ eval_expression_of (location_t loc, const constexpr_ctx *ctx, tree r,
     return throw_exception (loc, ctx,
 			    "reflection does not represent an expression "
 			    "statement", fun, non_constant_p, jump_target);
+  if (null_statement_p (r))
+    return throw_exception (loc, ctx,
+			    "reflection represents a null statement, which "
+			    "has no expression", fun, non_constant_p,
+			    jump_target);
   while (r && (TREE_CODE (r) == CLEANUP_POINT_EXPR
 	       || TREE_CODE (r) == EXPR_STMT
 	       || (CONVERT_EXPR_P (r) && VOID_TYPE_P (TREE_TYPE (r)))))
@@ -4736,9 +4843,80 @@ eval_is_literal (tree r)
   return boolean_false_node;
 }
 
+/* If R copies a glvalue of a trivially copyable class into a temporary, as
+   for `a` passed by value in `f (a)`, return the glvalue, otherwise NULL_TREE.
+   There's no constructor call to see, only TARGET_EXPR <D.1, a>, but it's the
+   same construction as a non-trivial copy.  */
+
+static tree
+class_copy_source (tree r)
+{
+  while (r && TREE_CODE (r) == CLEANUP_POINT_EXPR)
+    r = TREE_OPERAND (r, 0);
+  if (r && TREE_CODE (r) == TARGET_EXPR && CLASS_TYPE_P (TREE_TYPE (r)))
+    if (tree init = TARGET_EXPR_INITIAL (r))
+      if (glvalue_p (init))
+	return init;
+  return NULL_TREE;
+}
+
+/* A class with a non-trivial copy constructor or destructor is passed by
+   invisible reference, so its argument is the address of a temporary.  The
+   source has no `&`: the operand is the temporary.  */
+
+static tree
+strip_invisible_reference_arg (tree arg)
+{
+  if (TREE_CODE (arg) == ADDR_EXPR
+      && TYPE_REF_P (TREE_TYPE (arg))
+      && TREE_CODE (TREE_OPERAND (arg, 0)) == TARGET_EXPR)
+    return TREE_OPERAND (arg, 0);
+  return arg;
+}
+
+/* cp_build_addr_expr_1 cancels the `&*` of `&*p` to the rvalue of `p`.  Return
+   the dereference the source has, given what's left of it, PTR.  An rvalue of
+   an lvalue pointer is NON_LVALUE_EXPR <p>, which on its own would be a unary
+   plus (see eval_operator_of), but the source has no `+` here.  */
+
+static tree
+deref_of_cancelled_address (tree ptr)
+{
+  if (TREE_CODE (ptr) == NON_LVALUE_EXPR)
+    ptr = TREE_OPERAND (ptr, 0);
+  return build1_loc (EXPR_LOCATION (ptr), INDIRECT_REF,
+		     TREE_TYPE (TREE_TYPE (ptr)), ptr);
+}
+
+/* True if R, which converts a pointer to a reference to its pointee, binds the
+   reference to a dereference whose `&*` has cancelled.  It may be the address
+   of an lvalue instead, in a form other than an ADDR_EXPR: unary_complex_lvalue
+   lowers the address of `c ? a : b` to `c ? &a : &b`, and cp_genericize_r the
+   address of a parameter passed by invisible reference to a conversion of the
+   parameter.  */
+
+static bool
+binds_cancelled_deref_p (tree r)
+{
+  if (!CONVERT_EXPR_P (r) || !TYPE_REF_P (TREE_TYPE (r)))
+    return false;
+  tree ptr = TREE_OPERAND (r, 0);
+  if (!TYPE_PTR_P (TREE_TYPE (ptr))
+      || !same_type_ignoring_top_level_qualifiers_p (TREE_TYPE (TREE_TYPE (r)),
+						     TREE_TYPE (TREE_TYPE (ptr))))
+    return false;
+  if (TREE_CODE (ptr) == ADDR_EXPR || TREE_CODE (ptr) == COND_EXPR)
+    return false;
+  if (CONVERT_EXPR_P (ptr) && is_invisiref_parm (TREE_OPERAND (ptr, 0)))
+    return false;
+  return true;
+}
+
 /* True if R is a conversion.  That includes the dereference that
-   convert_from_reference puts around a use of a reference: it isn't a `*`
-   in the source but the lvalue the reference refers to.  Around a call
+   convert_from_reference puts around a use of a reference other than an
+   id-expression (which get_reflection_raw_expression reflects as the
+   id-expression), such as a reference member: it isn't a `*` in the source
+   but the lvalue the reference refers to.  Around a call
    returning a reference, as in `return std::max (x, y);`, the dereference
    is the call itself (see unwrap_call_expr), not a conversion of it.  */
 
@@ -4775,6 +4953,8 @@ is_construct_tree (tree r)
 {
   if (!r)
     return false;
+  if (class_copy_source (r))
+    return true;
   while (r && (TREE_CODE (r) == CLEANUP_POINT_EXPR
 	       || (TREE_CODE (r) == TARGET_EXPR && TARGET_EXPR_INITIAL (r))))
     {
@@ -4798,6 +4978,8 @@ construct_operand_count (tree r)
 {
   if (!r)
     return -1;
+  if (class_copy_source (r))
+    return 1;
   while (r && (TREE_CODE (r) == CLEANUP_POINT_EXPR
 	       || (TREE_CODE (r) == TARGET_EXPR && TARGET_EXPR_INITIAL (r))))
     {
@@ -5143,6 +5325,87 @@ eval_declaration_of (location_t loc, const constexpr_ctx *ctx, tree r,
 			  fun, non_constant_p, jump_target);
 }
 
+/* Return `b' as written in the compound assignment `a op= b' whose
+   MODIFY_EXPR is R.  cp_build_modify_expr builds it as `a = a op b', with
+   conversions to and from the type of the operation, and with `b' first
+   evaluated into a temporary if it has side effects.  Return NULL_TREE if
+   the operation can't be found.  */
+
+static tree
+compound_assignment_rhs (tree r)
+{
+  tree op = TREE_OPERAND (r, 1);
+  tree init = NULL_TREE;
+  for (;;)
+    {
+      op = tree_strip_any_location_wrapper (op);
+      if (CONVERT_EXPR_P (op)
+	  || TREE_CODE (op) == NON_LVALUE_EXPR
+	  || TREE_CODE (op) == FLOAT_EXPR
+	  || TREE_CODE (op) == FIX_TRUNC_EXPR)
+	op = TREE_OPERAND (op, 0);
+      else if (TREE_CODE (op) == COMPOUND_EXPR)
+	{
+	  init = TREE_OPERAND (op, 0);
+	  op = TREE_OPERAND (op, 1);
+	}
+      else
+	break;
+    }
+  if (!BINARY_CLASS_P (op))
+    return NULL_TREE;
+  tree b = TREE_OPERAND (op, 1);
+  if (init && TREE_CODE (init) == TARGET_EXPR)
+    {
+      tree slot = b;
+      while (CONVERT_EXPR_P (slot)
+	     || TREE_CODE (slot) == FLOAT_EXPR
+	     || TREE_CODE (slot) == FIX_TRUNC_EXPR)
+	slot = TREE_OPERAND (slot, 0);
+      if (slot == TARGET_EXPR_SLOT (init) && TARGET_EXPR_INITIAL (init))
+	return TARGET_EXPR_INITIAL (init);
+    }
+  return b;
+}
+
+/* Return the lvalue T with the SAVE_EXPRs that cp_stabilize_reference
+   added removed.  For a compound assignment `a op= b', it evaluates the
+   parts of `a' with side effects once, so `f () += b' has the left operand
+   `*SAVE_EXPR <f ()>' and `p[i++] += b' has `*SAVE_EXPR <p + i++ * 8>'.
+   The source has neither: the operand is `f ()' or `p[i++]', as for a
+   simple assignment.  */
+
+static tree
+unsave_lvalue (tree t)
+{
+  if (TREE_CODE (t) == SAVE_EXPR)
+    return unsave_lvalue (TREE_OPERAND (t, 0));
+  int n;
+  if (TREE_CODE (t) == ARRAY_REF || TREE_CODE (t) == ARRAY_RANGE_REF)
+    n = 2;
+  else if (INDIRECT_REF_P (t)
+	   || TREE_CODE (t) == COMPONENT_REF
+	   || TREE_CODE (t) == BIT_FIELD_REF
+	   || CONVERT_EXPR_P (t)
+	   || TREE_CODE (t) == NON_LVALUE_EXPR)
+    n = 1;
+  else
+    return t;
+  tree copy = t;
+  for (int i = 0; i < n; ++i)
+    if (tree op = TREE_OPERAND (t, i))
+      {
+	tree unsaved = unsave_lvalue (op);
+	if (unsaved != op)
+	  {
+	    if (copy == t)
+	      copy = copy_node (t);
+	    TREE_OPERAND (copy, i) = unsaved;
+	  }
+      }
+  return copy;
+}
+
 static tree
 eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		  bool *non_constant_p, tree *jump_target, tree fun)
@@ -5153,6 +5416,13 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
 
   vec<constructor_elt, va_gc> *elts = nullptr;
   bool is_postfix_op = (eval_is_postfix (r) == boolean_true_node);
+
+  if (tree source = class_copy_source (r))
+    {
+      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+			      get_reflection_raw_expression (loc, source));
+      return get_vector_of_info_elts (elts);
+    }
 
   if (tree call = unwrap_call_expr (r))
     {
@@ -5182,8 +5452,7 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		       but the object in the source is the dereference.  (A
 		       reference object stays the reference: `r * x` has the
 		       operand `r`.)  */
-		    arg = build1_loc (EXPR_LOCATION (arg), INDIRECT_REF,
-				      TREE_TYPE (TREE_TYPE (arg)), arg);
+		    arg = deref_of_cancelled_address (arg);
 		  CONSTRUCTOR_APPEND_ELT
 		    (elts, NULL_TREE,
 		     get_reflection_raw_expression (loc, arg));
@@ -5191,6 +5460,7 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
 	      return !is_postfix_op;
 	    }
 	  first_arg = false;
+	  arg = strip_invisible_reference_arg (arg);
 	  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
 				  get_reflection_raw_expression (loc, arg));
 	  return !is_postfix_op;
@@ -5232,8 +5502,10 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
       int nargs = aggr_init_expr_nargs (r);
       for (int i = 1; i < nargs; ++i)
 	if (tree arg = AGGR_INIT_EXPR_ARG (r, i))
-	  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-				  get_reflection_raw_expression (loc, arg));
+	  CONSTRUCTOR_APPEND_ELT
+	    (elts, NULL_TREE,
+	     get_reflection_raw_expression
+	       (loc, strip_invisible_reference_arg (arg)));
     }
   else if (code == CONSTRUCTOR)
     {
@@ -5243,6 +5515,18 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
 	if (val)
 	  CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
 				  get_reflection_raw_expression (loc, val));
+    }
+  else if (code == MODIFY_EXPR
+	   && modify_expr_compound_code (r) != ERROR_MARK
+	   && compound_assignment_rhs (r))
+    {
+      /* `a op= b' has the operands `a' and `b', not `a' and `a op b'.  */
+      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+			      get_reflection_raw_expression
+				(loc, unsave_lvalue (TREE_OPERAND (r, 0))));
+      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+			      get_reflection_raw_expression
+				(loc, compound_assignment_rhs (r)));
     }
   else if (CONVERT_EXPR_P (r)
 	   && TYPE_REF_P (TREE_TYPE (r))
@@ -5264,6 +5548,14 @@ eval_operands_of (location_t loc, const constexpr_ctx *ctx, tree r,
       CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
 			      get_reflection_raw_expression (loc, op));
     }
+  else if (binds_cancelled_deref_p (r))
+    /* Binding a reference to `*p` takes `&*p`, which cancels, so what's
+       converted to the reference type is `p`.  The operand in the source is
+       the dereference.  */
+    CONSTRUCTOR_APPEND_ELT
+      (elts, NULL_TREE,
+       get_reflection_raw_expression
+	 (loc, deref_of_cancelled_address (TREE_OPERAND (r, 0))));
   else
     {
       int len = cp_tree_operand_length (r);
@@ -11253,6 +11545,32 @@ check_out_of_consteval_use (tree expr, bool complain/*=true*/)
   return false;
 }
 
+/* Return true if LHS and RHS, at least one of them a PARM_DECL, are the
+   same parameter (or parameter variable) of the same function.
+   cp_tree_equal would match any two parameters of the same type, level and
+   index, which conflates parameters of different functions and the elements
+   of an expanded pack (they share the pack's index).  Pointer identity is too
+   strict: a redeclaration or an instantiation replaces a function's
+   PARM_DECLs (see maybe_update_function_parm), and constant evaluation runs a
+   call on a copy of the function's body and PARM_DECLs, so ^^p evaluated in
+   it yields the copy.  All of these keep the function as DECL_CONTEXT and the
+   parameters chained in order, so compare that and the position from the end
+   of the chain.  */
+
+static bool
+same_parm_p (tree lhs, tree rhs)
+{
+  if (lhs == rhs)
+    return true;
+  if (TREE_CODE (lhs) != PARM_DECL || TREE_CODE (rhs) != PARM_DECL)
+    return false;
+  /* A parameter of a declarator that isn't attached to a function yet.  */
+  if (!DECL_CONTEXT (lhs) || !DECL_CONTEXT (rhs))
+    return cp_tree_equal (lhs, rhs);
+  return (DECL_CONTEXT (lhs) == DECL_CONTEXT (rhs)
+	  && list_length (lhs) == list_length (rhs));
+}
+
 /* Return true if the reflections LHS and RHS are equal.  */
 
 bool
@@ -11287,11 +11605,8 @@ compare_reflections (tree lhs, tree rhs)
 
   /* First handle reflection-specific comparisons, then fall back to
      cp_tree_equal.  */
-  if (lkind == REFLECT_PARM)
-    {
-      lhs = maybe_update_function_parm (lhs);
-      rhs = maybe_update_function_parm (rhs);
-    }
+  if (TREE_CODE (lhs) == PARM_DECL || TREE_CODE (rhs) == PARM_DECL)
+    return same_parm_p (lhs, rhs);
   else if (lkind == REFLECT_DATA_MEMBER_SPEC)
     {
       if (typedef_variant_p (TREE_VEC_ELT (lhs, 0))
@@ -11314,6 +11629,24 @@ compare_reflections (tree lhs, tree rhs)
   else if (lkind == REFLECT_ANNOTATION)
     return TREE_VALUE (lhs) == TREE_VALUE (rhs);
   else if (lkind == REFLECT_BASE)
+    return lhs == rhs;
+  else if (eval_is_compound_statement (lhs) == boolean_true_node
+	   && eval_is_compound_statement (rhs) == boolean_true_node)
+    {
+      /* cp_tree_equal can't compare statement lists or BLOCKs, and two
+	 blocks that are alike are still two statements, so these are equal
+	 only if they reflect the same block.  body_of gives a new BIND_EXPR
+	 each time for a body that isn't a block, so two of those are equal
+	 if they hold the same body.  */
+      if (TREE_CODE (lhs) == BIND_EXPR && BIND_EXPR_REFLECT_BODY (lhs)
+	  && TREE_CODE (rhs) == BIND_EXPR && BIND_EXPR_REFLECT_BODY (rhs))
+	return BIND_EXPR_BODY (lhs) == BIND_EXPR_BODY (rhs);
+      return lhs == rhs;
+    }
+  else if (TREE_CODE (lhs) == IF_STMT || TREE_CODE (rhs) == IF_STMT)
+    /* Likewise for an `if' with a constant condition that cp_genericize_r
+       keeps under -freflection: cp_tree_equal can't compare statements
+       either.  */
     return lhs == rhs;
   else if (TYPE_P (lhs) && TYPE_P (rhs))
     {

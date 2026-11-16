@@ -475,7 +475,9 @@ cxx_block_may_fallthru (const_tree stmt)
       return false;
 
     case IF_STMT:
-      if (IF_STMT_CONSTEXPR_P (stmt))
+      /* An `if' kept by cp_genericize_r for -freflection is the statement
+	 its condition selects, as it would be without -freflection.  */
+      if (IF_STMT_CONSTEXPR_P (stmt) || IF_STMT_REFLECTION_KEPT_P (stmt))
 	{
 	  if (integer_nonzerop (IF_COND (stmt)))
 	    return block_may_fallthru (THEN_CLAUSE (stmt));

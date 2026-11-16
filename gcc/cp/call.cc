@@ -14422,11 +14422,29 @@ set_up_extended_ref_temp (tree decl, tree expr, vec<tree, va_gc> **cleanups,
   DECL_NONTRIVIALLY_INITIALIZED_P (var) = true;
 
   /* If the initializer is constant, put it in DECL_INITIAL so we get
-     static initialization and use in constant expressions.  */
-  init = maybe_constant_init (expr, var, /*manifestly_const_eval=*/true);
-  /* As in store_init_value.  */
-  init = cp_fully_fold (init);
-  if (TREE_CONSTANT (init))
+     static initialization and use in constant expressions.
+
+     Not for an automatic variable that isn't constexpr in an immediate
+     function context with -freflection, though.  Its initializer isn't
+     manifestly constant-evaluated: it is evaluated at each call, and a
+     reflection query can give a different answer at a call than here
+     (members_of sees the members declared before the evaluation,
+     is_complete_type a later definition).  Evaluating it now would fix the
+     answer where the function is defined.  Code is never generated for such
+     a function, so static initialization gains nothing.  */
+  bool fold_now = !(flag_reflection
+		    && in_immediate_context ()
+		    && VAR_P (decl)
+		    && !DECL_DECLARED_CONSTEXPR_P (decl)
+		    && !TREE_STATIC (decl));
+  init = expr;
+  if (fold_now)
+    {
+      init = maybe_constant_init (expr, var, /*manifestly_const_eval=*/true);
+      /* As in store_init_value.  */
+      init = cp_fully_fold (init);
+    }
+  if (fold_now && TREE_CONSTANT (init))
     {
       if (literal_type_p (type)
 	  && CP_TYPE_CONST_NON_VOLATILE_P (type)

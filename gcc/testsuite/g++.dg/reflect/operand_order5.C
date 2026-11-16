@@ -53,8 +53,9 @@ static_assert (oper (strip (return_operand_of (statements_of (body_of (^^r2))[0]
 	       == operators::op_exclamation);
 // An assignment.
 static_assert (d_then_p (op (expr (1), 1), operators::op_plus));
-// A compound assignment.
-static_assert (d_then_p (op (op (expr (2), 1), 1), operators::op_star));
+// A compound assignment, which keeps its operator.
+static_assert (oper (expr (2)) == operators::op_plus_equals);
+static_assert (d_then_p (op (expr (2), 1), operators::op_star));
 // A call argument.
 static_assert (d_then_p (op (expr (3), 0), operators::op_plus));
 // An aggregate initialization.

@@ -649,10 +649,12 @@ at_try_scope ()
   return b && b->kind == sk_try;
 }
 
-/* Finish a scope.  */
+/* Finish a scope.  If REFLECT_BLOCK, the scope is a block that is a
+   statement of a block, which gets a BIND_EXPR even if it declares nothing
+   (see BIND_EXPR_REFLECT_BLOCK).  */
 
 tree
-do_poplevel (tree stmt_list)
+do_poplevel (tree stmt_list, bool reflect_block)
 {
   tree block = NULL;
 
@@ -671,8 +673,20 @@ do_poplevel (tree stmt_list)
 
   if (!processing_template_decl)
     {
+      tree body = stmt_list;
       stmt_list = c_build_bind_expr (input_location, block, stmt_list);
       /* ??? See c_end_compound_stmt re statement expressions.  */
+      if (reflect_block)
+	{
+	  if (stmt_list == body)
+	    {
+	      stmt_list = build3_loc (input_location, BIND_EXPR,
+				      void_type_node, NULL_TREE, body,
+				      NULL_TREE);
+	      TREE_SIDE_EFFECTS (stmt_list) = 1;
+	    }
+	  BIND_EXPR_REFLECT_BLOCK (stmt_list) = 1;
+	}
     }
 
   return stmt_list;
@@ -1408,6 +1422,32 @@ finish_if_stmt (tree if_stmt)
   add_stmt (do_poplevel (scope));
 }
 
+/* True if T has only what -freflection adds to the tree and isn't there
+   without it: the markers of null statements, and blocks of them that
+   declare nothing.  */
+
+static bool
+only_null_statement_markers_p (tree t)
+{
+  if (t == NULL_TREE)
+    return true;
+  if (TREE_CODE (t) == STATEMENT_LIST)
+    {
+      for (tree stmt : tsi_range (t))
+	if (TREE_CODE (stmt) != DEBUG_BEGIN_STMT
+	    && !only_null_statement_markers_p (stmt))
+	  return false;
+      return true;
+    }
+  if (TREE_CODE (t) == BIND_EXPR
+      && BIND_EXPR_REFLECT_BLOCK (t)
+      && !BIND_EXPR_VARS (t)
+      && !BIND_EXPR_BLOCK (t))
+    return only_null_statement_markers_p (BIND_EXPR_BODY (t));
+  return (TREE_CODE (t) == DECL_EXPR
+	  && reflection_null_statement_marker_p (DECL_EXPR_DECL (t)));
+}
+
 /* Determine if iteration statement with *CONDP condition and
    loop BODY is trivially empty iteration statement or even
    trivial infinite loop.  In the latter case for -ffinite-loops
@@ -1420,7 +1460,9 @@ finish_loop_cond (tree *condp, tree body)
 {
   if (TREE_CODE (*condp) == INTEGER_CST)
     return;
-  bool trivially_empty = expr_first (body) == NULL_TREE;
+  bool trivially_empty = (expr_first (body) == NULL_TREE
+			  || (flag_reflection
+			      && only_null_statement_markers_p (body)));
   bool trivial_infinite = false;
   if (trivially_empty)
     {
@@ -2163,6 +2205,8 @@ tree
 begin_compound_stmt (unsigned int flags)
 {
   tree r;
+  bool reflect_block = (flag_reflection && (flags & BCS_REFLECT_BLOCK)
+			&& !(flags & BCS_NO_SCOPE));
 
   if (flags & BCS_NO_SCOPE)
     {
@@ -2198,8 +2242,11 @@ begin_compound_stmt (unsigned int flags)
       r = build3 (BIND_EXPR, NULL, NULL, r, NULL);
       BIND_EXPR_TRY_BLOCK (r) = (flags & BCS_TRY_BLOCK) != 0;
       BIND_EXPR_BODY_BLOCK (r) = (flags & BCS_FN_BODY) != 0;
+      BIND_EXPR_REFLECT_BLOCK (r) = reflect_block;
       TREE_SIDE_EFFECTS (r) = 1;
     }
+  else if (reflect_block)
+    STATEMENT_LIST_REFLECT_BLOCK (r) = 1;
 
   return r;
 }
@@ -2218,7 +2265,8 @@ finish_compound_stmt (tree stmt)
       if (TREE_CODE (body) == STATEMENT_LIST
 	  && STATEMENT_LIST_HEAD (body) == NULL
 	  && !BIND_EXPR_BODY_BLOCK (stmt)
-	  && !BIND_EXPR_TRY_BLOCK (stmt))
+	  && !BIND_EXPR_TRY_BLOCK (stmt)
+	  && !BIND_EXPR_REFLECT_BLOCK (stmt))
 	stmt = body;
       else
 	BIND_EXPR_BODY (stmt) = body;
@@ -2231,7 +2279,7 @@ finish_compound_stmt (tree stmt)
 	 created.  */
       objc_clear_super_receiver ();
 
-      stmt = do_poplevel (stmt);
+      stmt = do_poplevel (stmt, STATEMENT_LIST_REFLECT_BLOCK (stmt));
     }
 
   /* ??? See c_end_compound_stmt wrt statement expressions.  */

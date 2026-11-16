@@ -485,6 +485,7 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       LAMBDA_EXPR_CONST_QUAL_P (in LAMBDA_EXPR)
       SPLICE_EXPR_MEMBER_ACCESS_P (in SPLICE_EXPR)
       PACK_INDEX_PARENTHESIZED_P (in PACK_INDEX_*)
+      modify_expr_compound_code (in MODIFY_EXPR)
    2: IDENTIFIER_KIND_BIT_2 (in IDENTIFIER_NODE)
       ICS_THIS_FLAG (in _CONV)
       DECL_INITIALIZED_BY_CONSTANT_EXPRESSION_P (in VAR_DECL)
@@ -509,6 +510,7 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       MUST_NOT_THROW_CATCH_P (in MUST_NOT_THROW_EXPR)
       MULTIPLE_NAMES_PARM_P (in PARM_DECL)
       SPLICE_EXPR_ADDRESS_P (in SPLICE_EXPR)
+      modify_expr_compound_code (in MODIFY_EXPR)
    3: IMPLICIT_RVALUE_P (in NON_LVALUE_EXPR or STATIC_CAST_EXPR)
       ICS_BAD_FLAG (in _CONV)
       FN_TRY_BLOCK_P (in TRY_BLOCK)
@@ -524,9 +526,12 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       IF_STMT_VACUOUS_INIT_P (IF_STMT)
       TYPENAME_IS_RESOLVING_P (in TYPENAME_TYPE)
       SPLICE_EXPR_TEMPLATE_P (in SPLICE_EXPR)
+      modify_expr_compound_code (in MODIFY_EXPR)
    4: IDENTIFIER_MARKED (IDENTIFIER_NODEs)
       TREE_HAS_CONSTRUCTOR (in INDIRECT_REF, SAVE_EXPR, CONSTRUCTOR,
 	  CALL_EXPR, or FIELD_DECL).
+      BIND_EXPR_REFLECT_BLOCK (in BIND_EXPR)
+      STATEMENT_LIST_REFLECT_BLOCK (in STATEMENT_LIST)
       DECL_TINFO_P (in VAR_DECL, TYPE_DECL)
       FUNCTION_REF_QUALIFIED (in FUNCTION_TYPE, METHOD_TYPE)
       OVL_LOOKUP_P (in OVERLOAD)
@@ -536,8 +541,11 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       CONTRACT_CONST (in ASSERTION_, PRECONDITION_, POSTCONDITION_STMT)
       DECL_HAS_DEFAULT_ARGUMENT_P (in PARM_DECL)
       SPLICE_EXPR_TARGS_P (in SPLICE_EXPR)
+      modify_expr_compound_code (in MODIFY_EXPR)
+      IF_STMT_REFLECTION_KEPT_P (in IF_STMT)
    5: IDENTIFIER_VIRTUAL_P (in IDENTIFIER_NODE)
       FUNCTION_RVALUE_QUALIFIED (in FUNCTION_TYPE, METHOD_TYPE)
+      BIND_EXPR_REFLECT_BODY (in BIND_EXPR)
       CALL_EXPR_REVERSE_ARGS (in CALL_EXPR, AGGR_INIT_EXPR)
       CONSTRUCTOR_PLACEHOLDER_BOUNDARY (in CONSTRUCTOR)
       OVL_EXPORT_P (in OVERLOAD)
@@ -778,6 +786,9 @@ typedef struct ptrmem_cst * ptrmem_cst_t;
 /* Used to mark the block around the member initializers and cleanups.  */
 #define BIND_EXPR_BODY_BLOCK(NODE) \
   TREE_LANG_FLAG_3 (BIND_EXPR_CHECK (NODE))
+/* This BIND_EXPR is from body_of, for a function body that isn't a block.  */
+#define BIND_EXPR_REFLECT_BODY(NODE) \
+  TREE_LANG_FLAG_5 (BIND_EXPR_CHECK (NODE))
 #define FUNCTION_NEEDS_BODY_BLOCK(NODE) \
   (DECL_CONSTRUCTOR_P (NODE) || DECL_DESTRUCTOR_P (NODE) \
    || LAMBDA_FUNCTION_P (NODE))
@@ -786,6 +797,15 @@ typedef struct ptrmem_cst * ptrmem_cst_t;
   TREE_LANG_FLAG_0 (STATEMENT_LIST_CHECK (NODE))
 #define STATEMENT_LIST_TRY_BLOCK(NODE) \
   TREE_LANG_FLAG_2 (STATEMENT_LIST_CHECK (NODE))
+
+/* Under -freflection, a block that is a statement of a block is kept as a
+   compound statement even if it declares nothing, so that statements_of
+   gives it.  begin_compound_stmt marks its statement list, or in a template
+   its BIND_EXPR, and do_poplevel gives it a BIND_EXPR, marked too.  */
+#define BIND_EXPR_REFLECT_BLOCK(NODE) \
+  TREE_LANG_FLAG_4 (BIND_EXPR_CHECK (NODE))
+#define STATEMENT_LIST_REFLECT_BLOCK(NODE) \
+  TREE_LANG_FLAG_4 (STATEMENT_LIST_CHECK (NODE))
 
 /* Mark the outer curly brace BLOCK.  */
 #define BLOCK_OUTER_CURLY_BRACE_P(NODE)	TREE_LANG_FLAG_0 (BLOCK_CHECK (NODE))
@@ -4519,6 +4539,12 @@ struct GTY(()) lang_decl {
 #define INIT_EXPR_NRV_P(NODE) \
   TREE_LANG_FLAG_0 (INIT_EXPR_CHECK (NODE))
 
+/* Under -freflection, a MODIFY_EXPR for a compound assignment `a op= b'
+   of non-class type, which cp_build_modify_expr builds as `a = a op b',
+   keeps the code of `op' in TREE_LANG_FLAG_1 to TREE_LANG_FLAG_4, so that
+   reflection can give the operator as written.  Read and write it with
+   modify_expr_compound_code and set_modify_expr_compound_code.  */
+
 #define CALL_OR_AGGR_INIT_CHECK(NODE) \
   TREE_CHECK2 ((NODE), CALL_EXPR, AGGR_INIT_EXPR)
 
@@ -5961,6 +5987,12 @@ decl_template_parm_check (const_tree t, const char *f, int l, const char *fn)
 /* True on artificial if (0) around .DEFERRED_INIT calls added for
    !!flag_auto_var_init.  */
 #define IF_STMT_VACUOUS_INIT_P(NODE) TREE_LANG_FLAG_3 (IF_STMT_CHECK (NODE))
+/* True on an if with a constant condition that cp_genericize_r keeps under
+   -freflection, where genericize_if_stmt would replace it by the statement
+   the condition selects, so that std::meta::statements_of sees the if.
+   cp_gimplify_expr makes that replacement.  */
+#define IF_STMT_REFLECTION_KEPT_P(NODE) \
+  TREE_LANG_FLAG_4 (IF_STMT_CHECK (NODE))
 
 /* Like PACK_EXPANSION_EXTRA_ARGS, for constexpr if.  IF_SCOPE is used while
    building an IF_STMT; IF_STMT_EXTRA_ARGS is used after it is complete.  */
@@ -8493,7 +8525,7 @@ public:
 
 extern int stmts_are_full_exprs_p		(void);
 extern void init_cp_semantics			(void);
-extern tree do_poplevel				(tree);
+extern tree do_poplevel				(tree, bool = false);
 extern tree do_pushlevel			(scope_kind);
 extern void break_maybe_infinite_loop		(void);
 extern void add_decl_expr			(tree);
@@ -8548,7 +8580,8 @@ enum {
   BCS_TRY_BLOCK = 2,
   BCS_FN_BODY = 4,
   BCS_TRANSACTION = 8,
-  BCS_STMT_EXPR = 16
+  BCS_STMT_EXPR = 16,
+  BCS_REFLECT_BLOCK = 32
 };
 extern tree begin_compound_stmt			(unsigned int);
 
@@ -9026,6 +9059,8 @@ extern cp_expr build_x_modify_expr		(location_t, tree,
 extern tree cp_build_modify_expr		(location_t, tree,
 						 enum tree_code, tree,
 						 tsubst_flags_t);
+extern enum tree_code modify_expr_compound_code	(const_tree);
+extern void set_modify_expr_compound_code	(tree, enum tree_code);
 extern tree convert_for_initialization		(tree, tree, tree, int,
 						 impl_conv_rhs, tree, int,
                                                  tsubst_flags_t);
@@ -9575,6 +9610,8 @@ extern void reflection_install_body_tables (const vec<tree> &,
 					    const vec<tree> &);
 extern tree reflection_declaration_marker (location_t);
 extern bool reflection_declaration_marker_p (tree);
+extern tree reflection_null_statement_marker (location_t);
+extern bool reflection_null_statement_marker_p (tree);
 
 /* Inline bodies.  */
 

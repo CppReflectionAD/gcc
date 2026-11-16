@@ -14582,7 +14582,16 @@ cp_parser_statement (cp_parser* parser, tree in_statement_expr,
   else if (token->type == CPP_OPEN_BRACE)
     {
       std_attrs = process_stmt_hotness_attribute (std_attrs, attrs_loc);
-      statement = cp_parser_compound_statement (parser, NULL, BCS_NORMAL, false);
+      /* Under -freflection, a block in a block is a statement of it even
+	 if it declares nothing.  */
+      int bcs_flags = BCS_NORMAL;
+      if (flag_reflection
+	  && in_compound
+	  && !in_statement_expr
+	  && at_function_scope_p ())
+	bcs_flags |= BCS_REFLECT_BLOCK;
+      statement = cp_parser_compound_statement (parser, NULL, bcs_flags,
+						false);
     }
   /* CPP_PRAGMA is a #pragma inside a function body, which constitutes
      a statement all its own.  */
@@ -14706,8 +14715,22 @@ cp_parser_statement (cp_parser* parser, tree in_statement_expr,
 
       std_attrs = process_stmt_hotness_attribute (std_attrs, attrs_loc);
 
+      /* Under -freflection, a null statement is a statement of its block.
+	 One with attributes keeps the meaning they give it.  */
+      bool null_statement_p
+	= (flag_reflection
+	   && in_compound
+	   && !in_statement_expr
+	   && !has_std_attrs
+	   && at_function_scope_p ()
+	   && cp_lexer_next_token_is (parser->lexer, CPP_SEMICOLON));
+
       /* Look for an expression-statement instead.  */
       statement = cp_parser_expression_statement (parser, in_statement_expr);
+
+      if (null_statement_p)
+	statement = add_stmt (reflection_null_statement_marker
+			      (statement_location));
 
       std_attrs = process_stmt_assume_attribute (std_attrs, statement,
 						 attrs_loc);

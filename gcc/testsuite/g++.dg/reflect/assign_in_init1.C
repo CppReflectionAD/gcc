@@ -28,10 +28,8 @@ static_assert (operands_of (initializer_of (fb)).size () == 2);
 static_assert (expression_operator_of (operands_of (initializer_of (fb))[1])
 	       == operators::op_star);
 
-// GCC reflects a += x as a = a + x.
 static_assert (statements_of (body_of (^^g)).size () == 3);
 constexpr info gb = declared_variable_of (statements_of (body_of (^^g))[1]);
 static_assert (expression_operator_of (initializer_of (gb))
-	       == operators::op_equals);
-static_assert (expression_operator_of (operands_of (initializer_of (gb))[1])
-	       == operators::op_plus);
+	       == operators::op_plus_equals);
+static_assert (operands_of (initializer_of (gb)).size () == 2);
