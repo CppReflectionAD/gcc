@@ -187,58 +187,61 @@ first_stmt (tree stmt)
     }
 }
 
-/* True if STMT is an `if constexpr' with a constant condition, which
-   genericize_if_stmt replaces by the statement the condition selects.  Under
-   -freflection, cp_genericize_r keeps it instead, so that
+/* True if genericize_if_stmt replaces the IF_STMT STMT by the statement its
+   condition selects: an `if constexpr' with a constant condition, or a plain
+   `if' with a constant condition whose other statement has no side effects.
+   Under -freflection, cp_genericize_r keeps such an `if' instead, so that
    std::meta::statements_of gives the `if' rather than that statement's
-   statements, and cp_gimplify_expr makes the replacement.  This doesn't test
-   flag_reflection: only cp_genericize_r leaves such an `if' in a body.  */
+   statements, and marks it IF_STMT_REFLECTION_KEPT_P; cp_gimplify_expr makes
+   the replacement.  */
 
 static bool
-constant_constexpr_if_p (tree stmt)
+constant_if_selects_clause_p (tree stmt)
 {
-  return (TREE_CODE (stmt) == IF_STMT
-	  && IF_STMT_CONSTEXPR_P (stmt)
-	  && !IF_STMT_CONSTEVAL_P (stmt)
-	  && !IF_STMT_VACUOUS_INIT_P (stmt)
-	  && TREE_CODE (IF_COND (stmt)) == INTEGER_CST);
+  if (IF_STMT_CONSTEVAL_P (stmt) || IF_STMT_VACUOUS_INIT_P (stmt))
+    return false;
+  tree cond = IF_COND (stmt);
+  if (IF_STMT_CONSTEXPR_P (stmt))
+    return TREE_CODE (cond) == INTEGER_CST;
+  if (integer_nonzerop (cond))
+    return !ELSE_CLAUSE (stmt) || !TREE_SIDE_EFFECTS (ELSE_CLAUSE (stmt));
+  if (integer_zerop (cond))
+    return !THEN_CLAUSE (stmt) || !TREE_SIDE_EFFECTS (THEN_CLAUSE (stmt));
+  return false;
 }
 
-/* The clause of an `if constexpr' kept by cp_genericize_r that its
-   condition selects, or NULL_TREE if that is an `else' it doesn't have.  */
+/* The clause of an `if' kept by cp_genericize_r that its condition
+   selects, or NULL_TREE if that is an `else' it doesn't have.  */
 
 static tree
-constexpr_if_clause (tree stmt)
+kept_if_clause (tree stmt)
 {
   return (integer_nonzerop (IF_COND (stmt))
 	  ? THEN_CLAUSE (stmt) : ELSE_CLAUSE (stmt));
 }
 
-/* The statement an `if constexpr' kept by cp_genericize_r selects,
-   which is what genericize_if_stmt replaces it by.  */
+/* The statement an `if' kept by cp_genericize_r selects, which is what
+   genericize_if_stmt replaces it by.  */
 
 static tree
-selected_constexpr_if_branch (tree stmt)
+kept_if_replacement (tree stmt)
 {
-  tree branch = constexpr_if_clause (stmt);
+  tree branch = kept_if_clause (stmt);
   if (!branch)
     branch = build_empty_stmt (EXPR_LOCATION (stmt));
   protected_set_expr_location_if_unset (branch, EXPR_LOCATION (stmt));
   return branch;
 }
 
-/* Genericize an IF_STMT by turning it into a COND_EXPR.  */
+/* Warn if both statements of the IF_STMT STMT are marked [[likely]], or
+   both [[unlikely]].  */
 
 static void
-genericize_if_stmt (tree *stmt_p)
+warn_if_both_branches_predicted (tree stmt)
 {
-  tree stmt, cond, then_, else_;
-  location_t locus = EXPR_LOCATION (*stmt_p);
-
-  stmt = *stmt_p;
-  cond = IF_COND (stmt);
-  then_ = THEN_CLAUSE (stmt);
-  else_ = ELSE_CLAUSE (stmt);
+  location_t locus = EXPR_LOCATION (stmt);
+  tree then_ = THEN_CLAUSE (stmt);
+  tree else_ = ELSE_CLAUSE (stmt);
 
   if (then_ && else_)
     {
@@ -257,6 +260,22 @@ genericize_if_stmt (tree *stmt_p)
 		      pr == PRED_HOT_LABEL ? "likely" : "unlikely");
 	}
     }
+}
+
+/* Genericize an IF_STMT by turning it into a COND_EXPR.  */
+
+static void
+genericize_if_stmt (tree *stmt_p)
+{
+  tree stmt, cond, then_, else_;
+  location_t locus = EXPR_LOCATION (*stmt_p);
+
+  stmt = *stmt_p;
+  cond = IF_COND (stmt);
+  then_ = THEN_CLAUSE (stmt);
+  else_ = ELSE_CLAUSE (stmt);
+
+  warn_if_both_branches_predicted (stmt);
 
   if (IF_STMT_VACUOUS_INIT_P (stmt))
     {
@@ -306,10 +325,8 @@ genericize_if_stmt (tree *stmt_p)
     stmt = integer_nonzerop (cond) ? then_ : else_;
   /* ??? This optimization doesn't seem to belong here, but removing it
      causes -Wreturn-type regressions (e.g. 107310).  */
-  else if (integer_nonzerop (cond) && !TREE_SIDE_EFFECTS (else_))
-    stmt = then_;
-  else if (integer_zerop (cond) && !TREE_SIDE_EFFECTS (then_))
-    stmt = else_;
+  else if (constant_if_selects_clause_p (stmt))
+    stmt = integer_nonzerop (cond) ? then_ : else_;
   else
     stmt = build3 (COND_EXPR, void_type_node, cond, then_, else_);
   protected_set_expr_location_if_unset (stmt, locus);
@@ -933,11 +950,11 @@ cp_gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
       gcc_unreachable ();
 
     case IF_STMT:
-      /* Under -freflection, cp_genericize_r kept an `if constexpr' for
-	 std::meta::statements_of.  It is just the statement it selects now,
-	 as without -freflection.  */
-      gcc_assert (constant_constexpr_if_p (*expr_p));
-      *expr_p = selected_constexpr_if_branch (*expr_p);
+      /* Under -freflection, cp_genericize_r kept an `if' with a constant
+	 condition for std::meta::statements_of.  It is just the statement it
+	 selects now, as without -freflection.  */
+      gcc_assert (IF_STMT_REFLECTION_KEPT_P (*expr_p));
+      *expr_p = kept_if_replacement (*expr_p);
       ret = GS_OK;
       break;
 
@@ -2208,16 +2225,32 @@ cp_genericize_r (tree *stmt_p, int *walk_subtrees, void *data)
       break;
 
     case IF_STMT:
-      if (flag_reflection && constant_constexpr_if_p (stmt))
+      if (flag_reflection && constant_if_selects_clause_p (stmt))
 	{
-	  /* Keep the `if constexpr', without the discarded statement, which
-	     isn't code.  That is how tsubst_stmt leaves it in an instantiation,
-	     which has an empty `then' and no `else' where they are discarded.
-	     Then genericize the statement that's left.  */
-	  if (integer_nonzerop (IF_COND (stmt)))
-	    ELSE_CLAUSE (stmt) = NULL_TREE;
-	  else
-	    THEN_CLAUSE (stmt) = alloc_stmt_list ();
+	  /* Keep the `if' where genericize_if_stmt would replace it by the
+	     statement its condition selects, and genericize only that
+	     statement, as genericize_if_stmt does.  */
+	  warn_if_both_branches_predicted (stmt);
+	  IF_STMT_REFLECTION_KEPT_P (stmt) = 1;
+	  if (IF_STMT_CONSTEXPR_P (stmt))
+	    {
+	      /* Drop the discarded statement of an `if constexpr', which isn't
+		 code.  That is how tsubst_stmt leaves it in an instantiation,
+		 which has an empty `then' and no `else' where they are
+		 discarded.  */
+	      if (integer_nonzerop (IF_COND (stmt)))
+		ELSE_CLAUSE (stmt) = NULL_TREE;
+	      else
+		THEN_CLAUSE (stmt) = alloc_stmt_list ();
+	    }
+	  /* The other statement of a plain `if' is never reached and has no
+	     side effects.  It stays for std::meta::statements_of, but isn't
+	     genericized, and cp_gimplify_expr drops it.  */
+	  tree *selected = (integer_nonzerop (IF_COND (stmt))
+			    ? &THEN_CLAUSE (stmt) : &ELSE_CLAUSE (stmt));
+	  if (*selected)
+	    cp_walk_tree (selected, cp_genericize_r, data, NULL);
+	  *walk_subtrees = 0;
 	  break;
 	}
       genericize_if_stmt (stmt_p);
@@ -2846,11 +2879,11 @@ cp_maybe_instrument_return (tree fndecl)
 	case RETURN_EXPR:
 	  return;
 	case IF_STMT:
-	  /* An `if constexpr' kept for -freflection ends the body with the
-	     statement it selects.  */
-	  if (constant_constexpr_if_p (t) && constexpr_if_clause (t))
+	  /* An `if' kept for -freflection ends the body with the statement
+	     its condition selects.  */
+	  if (IF_STMT_REFLECTION_KEPT_P (t) && kept_if_clause (t))
 	    {
-	      t = constexpr_if_clause (t);
+	      t = kept_if_clause (t);
 	      continue;
 	    }
 	  break;

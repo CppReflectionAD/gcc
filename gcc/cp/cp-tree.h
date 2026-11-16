@@ -542,6 +542,7 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       DECL_HAS_DEFAULT_ARGUMENT_P (in PARM_DECL)
       SPLICE_EXPR_TARGS_P (in SPLICE_EXPR)
       modify_expr_compound_code (in MODIFY_EXPR)
+      IF_STMT_REFLECTION_KEPT_P (in IF_STMT)
    5: IDENTIFIER_VIRTUAL_P (in IDENTIFIER_NODE)
       FUNCTION_RVALUE_QUALIFIED (in FUNCTION_TYPE, METHOD_TYPE)
       BIND_EXPR_REFLECT_BODY (in BIND_EXPR)
@@ -5986,6 +5987,12 @@ decl_template_parm_check (const_tree t, const char *f, int l, const char *fn)
 /* True on artificial if (0) around .DEFERRED_INIT calls added for
    !!flag_auto_var_init.  */
 #define IF_STMT_VACUOUS_INIT_P(NODE) TREE_LANG_FLAG_3 (IF_STMT_CHECK (NODE))
+/* True on an if with a constant condition that cp_genericize_r keeps under
+   -freflection, where genericize_if_stmt would replace it by the statement
+   the condition selects, so that std::meta::statements_of sees the if.
+   cp_gimplify_expr makes that replacement.  */
+#define IF_STMT_REFLECTION_KEPT_P(NODE) \
+  TREE_LANG_FLAG_4 (IF_STMT_CHECK (NODE))
 
 /* Like PACK_EXPANSION_EXTRA_ARGS, for constexpr if.  IF_SCOPE is used while
    building an IF_STMT; IF_STMT_EXTRA_ARGS is used after it is complete.  */
