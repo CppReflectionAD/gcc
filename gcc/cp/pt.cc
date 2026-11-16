@@ -1966,15 +1966,38 @@ iterative_hash_template_arg (tree arg, hashval_t val)
       }
 
     case REFLECT_EXPR:
-      val = iterative_hash_hashval_t (REFLECT_EXPR_KIND (arg), val);
-      if (REFLECT_EXPR_KIND (arg) == REFLECT_BASE)
-	{
-	  tree binfo = REFLECT_EXPR_HANDLE (arg);
-	  val = iterative_hash_template_arg (BINFO_TYPE (binfo), val);
-	  val = iterative_hash_template_arg (direct_base_derived (binfo), val);
-	  return val;
-	}
-      return iterative_hash_template_arg (REFLECT_EXPR_HANDLE (arg), val);
+      {
+	val = iterative_hash_hashval_t (REFLECT_EXPR_KIND (arg), val);
+	if (REFLECT_EXPR_KIND (arg) == REFLECT_BASE)
+	  {
+	    tree binfo = REFLECT_EXPR_HANDLE (arg);
+	    val = iterative_hash_template_arg (BINFO_TYPE (binfo), val);
+	    val = iterative_hash_template_arg (direct_base_derived (binfo),
+					       val);
+	    return val;
+	  }
+	/* Normalize the handle as compare_reflections does, or two
+	   reflections it finds equal hash differently and name two
+	   specializations ("canonical types differ for identical types").
+	   It looks through an OVERLOAD to its first function: ^^f gives an
+	   OVERLOAD, but template_of gives the TEMPLATE_DECL itself.  */
+	tree h = maybe_get_first_fn (REFLECT_EXPR_HANDLE (arg));
+	/* It also takes a parameter of one declaration of a function to be
+	   the same parameter of another (maybe_update_function_parm), and
+	   their types can differ in top-level cv-qualifiers, so hash a
+	   parameter by its position, as the PARM_DECL case does, but not by
+	   its type.  */
+	if (TREE_CODE (h) == PARM_DECL)
+	  {
+	    if (!DECL_ARTIFICIAL (h))
+	      {
+		val = iterative_hash_object (DECL_PARM_INDEX (h), val);
+		val = iterative_hash_object (DECL_PARM_LEVEL (h), val);
+	      }
+	    return val;
+	  }
+	return iterative_hash_template_arg (h, val);
+      }
 
     default:
       break;
