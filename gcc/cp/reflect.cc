@@ -3325,20 +3325,52 @@ eval_parameters_of (location_t loc, const constexpr_ctx *ctx, tree r,
    -- r represents a parameter of a function F and
    -- there is a point P in the evaluation context for which the innermost
       non-block scope enclosing P is the function parameter scope associated
-      with F.  */
+      with F.
+
+   As an extension (matching the clang fork), the second condition is
+   replaced by F having a definition, instantiating F if need be, so this
+   works outside F's body too.  That lets code that reflects F's body match
+   a use of a parameter, whose declaration_of is the definition's PARM_DECL,
+   against parameters_of (F), including the unnamed elements of an expanded
+   pack.  Splicing the result outside F is still rejected, as for any local
+   of F.  */
 
 static tree
 eval_variable_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		  reflect_kind kind, bool *non_constant_p, tree *jump_target,
 		  tree fun)
 {
-  if (eval_is_function_parameter (r, kind) == boolean_false_node
-      /* This doesn't consider the points corresponding to injected
-	 declarations, but that doesn't seem needed.  */
-      || DECL_CONTEXT (r) != current_function_decl)
-    return throw_exception (loc, ctx, "reflection does not represent "
-				      "parameter of current function",
+  if (eval_is_function_parameter (r, kind) == boolean_false_node)
+    return throw_exception (loc, ctx, "reflection does not represent a "
+				      "function parameter",
 			    fun, non_constant_p, jump_target);
+
+  tree fn = DECL_CONTEXT (r);
+  /* This doesn't consider the points corresponding to injected
+     declarations, but that doesn't seem needed.  */
+  if (fn != current_function_decl)
+    {
+      if (!DECL_SAVED_TREE (fn)
+	  && (DECL_TEMPLOID_INSTANTIATION (fn) || DECL_TEMPLATE_INFO (fn)))
+	{
+	  /* Don't collect garbage while the trees of the evaluation are live
+	     only on the stack.  */
+	  ++function_depth;
+	  instantiate_decl (fn, /*defer_ok=*/false,
+			    /*expl_inst_class_mem_p=*/false);
+	  --function_depth;
+	}
+      /* Until F is defined its parameters are those of a declaration, which
+	 the definition replaces (see maybe_update_function_parm), so no
+	 variable is known yet.  */
+      if (!DECL_SAVED_TREE (fn)
+	  && !DECL_DELETED_FN (fn)
+	  && !DECL_DEFAULTED_FN (fn))
+	return throw_exception (loc, ctx, "reflection does not represent a "
+					  "parameter of a function with a "
+					  "definition",
+				fun, non_constant_p, jump_target);
+    }
   r = maybe_update_function_parm (r);
   return get_reflection_raw (loc, r, REFLECT_UNDEF);
 }
@@ -11503,6 +11535,32 @@ check_out_of_consteval_use (tree expr, bool complain/*=true*/)
   return false;
 }
 
+/* Return true if LHS and RHS, at least one of them a PARM_DECL, are the
+   same parameter (or parameter variable) of the same function.
+   cp_tree_equal would match any two parameters of the same type, level and
+   index, which conflates parameters of different functions and the elements
+   of an expanded pack (they share the pack's index).  Pointer identity is too
+   strict: a redeclaration or an instantiation replaces a function's
+   PARM_DECLs (see maybe_update_function_parm), and constant evaluation runs a
+   call on a copy of the function's body and PARM_DECLs, so ^^p evaluated in
+   it yields the copy.  All of these keep the function as DECL_CONTEXT and the
+   parameters chained in order, so compare that and the position from the end
+   of the chain.  */
+
+static bool
+same_parm_p (tree lhs, tree rhs)
+{
+  if (lhs == rhs)
+    return true;
+  if (TREE_CODE (lhs) != PARM_DECL || TREE_CODE (rhs) != PARM_DECL)
+    return false;
+  /* A parameter of a declarator that isn't attached to a function yet.  */
+  if (!DECL_CONTEXT (lhs) || !DECL_CONTEXT (rhs))
+    return cp_tree_equal (lhs, rhs);
+  return (DECL_CONTEXT (lhs) == DECL_CONTEXT (rhs)
+	  && list_length (lhs) == list_length (rhs));
+}
+
 /* Return true if the reflections LHS and RHS are equal.  */
 
 bool
@@ -11537,11 +11595,8 @@ compare_reflections (tree lhs, tree rhs)
 
   /* First handle reflection-specific comparisons, then fall back to
      cp_tree_equal.  */
-  if (lkind == REFLECT_PARM)
-    {
-      lhs = maybe_update_function_parm (lhs);
-      rhs = maybe_update_function_parm (rhs);
-    }
+  if (TREE_CODE (lhs) == PARM_DECL || TREE_CODE (rhs) == PARM_DECL)
+    return same_parm_p (lhs, rhs);
   else if (lkind == REFLECT_DATA_MEMBER_SPEC)
     {
       if (typedef_variant_p (TREE_VEC_ELT (lhs, 0))
