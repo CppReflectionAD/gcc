@@ -3601,6 +3601,13 @@ reflection_record_constructor_init (tree var, tree call)
   split_initializers->put (var, init);
 }
 
+static tree
+get_for_init_stmt (tree for_stmt)
+{
+  if (FOR_INIT_STMT (for_stmt))
+    return FOR_INIT_STMT (for_stmt);
+  return FOR_STMT_REFLECT_INIT (for_stmt);
+}
 /* A static local with a dynamic initializer is split too: expand_static_init
    declares it without an initializer and initializes it in an `if' on its
    guard variable, after the declaration.  Map each guard variable to its
@@ -3973,6 +3980,35 @@ static tree eval_is_return_statement (tree);
 static tree eval_is_declaration_statement (tree);
 static tree declared_var_of_stmt (tree);
 
+/* If STMT is a sk_for BIND_EXPR created for a for-statement's
+   init-declaration, unwrap it to the FOR_STMT itself so statements_of reports
+   the for-statement directly rather than a synthetic block.  */
+
+static tree
+unwrap_for_scope (tree stmt)
+{
+  if (!stmt || TREE_CODE (stmt) != BIND_EXPR)
+    return stmt;
+  tree body = BIND_EXPR_BODY (stmt);
+  if (!body)
+    return stmt;
+  if (TREE_CODE (body) == FOR_STMT)
+    return body;
+  while (body)
+    {
+      if (TREE_CODE (body) == STATEMENT_LIST && STATEMENT_LIST_TAIL (body))
+	body = tsi_stmt (tsi_last (body));
+      else if (TREE_CODE (body) == TRY_FINALLY_EXPR)
+	body = TREE_OPERAND (body, 0);
+      else if (TREE_CODE (body) == CLEANUP_STMT)
+	body = CLEANUP_BODY (body);
+      else
+	break;
+    }
+  if (body && TREE_CODE (body) == FOR_STMT && FOR_STMT_REFLECT_INIT (body))
+    return body;
+  return stmt;
+}
 /* Append STMT, a statement of a block, to ELTS the way statements_of
    reports it.  */
 
@@ -3980,6 +4016,7 @@ static void
 append_block_statement (location_t loc, tree stmt,
 			vec<constructor_elt, va_gc> **elts)
 {
+  stmt = unwrap_for_scope (stmt);
   if (stmt && (added_statement_p (stmt) || split_initialization_p (stmt)))
     return;
   tree orig_expr_stmt = NULL_TREE;
@@ -5175,6 +5212,30 @@ eval_label_of (location_t loc, const constexpr_ctx *ctx, tree r,
   return get_reflection_raw (loc, label, REFLECT_UNDEF);
 }
 
+/* Cache synthetic BIND_EXPR wrappers for single-statement or empty compound
+   blocks so repeated reflections compare equal.  */
+
+static GTY(()) hash_map<tree, tree> *compound_stmt_wrappers;
+static GTY(()) hash_map<tree, tree> *null_stmt_markers;
+
+static tree
+get_compound_statement_reflection_for (location_t loc, tree parent, tree block)
+{
+  if (block && (TREE_CODE (block) == BIND_EXPR
+		|| TREE_CODE (block) == STATEMENT_LIST))
+    return get_reflection_raw (loc, block, REFLECT_UNDEF);
+  tree key = block ? block : parent;
+  if (!compound_stmt_wrappers)
+    compound_stmt_wrappers = hash_map<tree, tree>::create_ggc (16);
+  if (tree *existing = compound_stmt_wrappers->get (key))
+    return get_reflection_raw (loc, *existing, REFLECT_UNDEF);
+  tree wrapper = build3_loc (loc, BIND_EXPR, void_type_node, NULL_TREE, block,
+			     NULL_TREE);
+  BIND_EXPR_REFLECT_BODY (wrapper) = 1;
+  compound_stmt_wrappers->put (key, wrapper);
+  return get_reflection_raw (loc, wrapper, REFLECT_UNDEF);
+}
+
 /* An if's branch that is just `goto L;` is a STATEMENT_LIST of the goto and
    the PREDICT_EXPR the front end puts before it.  Return the goto in that
    case, otherwise OP.  */
@@ -5239,27 +5300,151 @@ eval_conditional_operand (location_t loc, const constexpr_ctx *ctx, tree r,
   return get_reflection_raw_expression (loc, op);
 }
 
-/* Cache synthetic BIND_EXPR wrappers for empty compound blocks so repeated
-   reflections compare equal.  */
-
-static GTY(()) hash_map<tree, tree> *compound_stmt_wrappers;
+/* Return the FOR_STMT, WHILE_STMT, or DO_STMT (as CODE says) that R
+   represents, or NULL_TREE.  */
 
 static tree
-get_compound_statement_reflection_for (location_t loc, tree parent, tree block)
+get_loop_statement (tree r, tree_code code)
 {
-  if (block && (TREE_CODE (block) == BIND_EXPR
-		|| TREE_CODE (block) == STATEMENT_LIST))
-    return get_reflection_raw (loc, block, REFLECT_UNDEF);
-  tree key = block ? block : parent;
-  if (!compound_stmt_wrappers)
-    compound_stmt_wrappers = hash_map<tree, tree>::create_ggc (16);
-  if (tree *existing = compound_stmt_wrappers->get (key))
-    return get_reflection_raw (loc, *existing, REFLECT_UNDEF);
-  tree wrapper = build3_loc (loc, BIND_EXPR, void_type_node, NULL_TREE, block,
-			     NULL_TREE);
-  BIND_EXPR_REFLECT_BODY (wrapper) = 1;
-  compound_stmt_wrappers->put (key, wrapper);
-  return get_reflection_raw (loc, wrapper, REFLECT_UNDEF);
+  r = unwrap_statement_wrappers (r);
+  if (r && TREE_CODE (r) == code)
+    return r;
+  return NULL_TREE;
+}
+
+static tree
+eval_is_for_statement (tree r)
+{
+  return get_loop_statement (r, FOR_STMT)
+	 ? boolean_true_node : boolean_false_node;
+}
+
+static tree
+eval_is_while_statement (tree r)
+{
+  return get_loop_statement (r, WHILE_STMT)
+	 ? boolean_true_node : boolean_false_node;
+}
+
+static tree
+eval_is_do_statement (tree r)
+{
+  return get_loop_statement (r, DO_STMT)
+	 ? boolean_true_node : boolean_false_node;
+}
+
+static tree
+eval_is_break_statement (tree r)
+{
+  return get_jump_statement (r, BREAK_STMT)
+	 ? boolean_true_node : boolean_false_node;
+}
+
+static tree
+eval_is_continue_statement (tree r)
+{
+  return get_jump_statement (r, CONTINUE_STMT)
+	 ? boolean_true_node : boolean_false_node;
+}
+
+static tree
+eval_init_statement_of (location_t loc, const constexpr_ctx *ctx, tree r,
+			bool *non_constant_p, tree *jump_target, tree fun)
+{
+  tree f = get_loop_statement (r, FOR_STMT);
+  if (!f)
+    return throw_exception (loc, ctx,
+			    "reflection does not represent a for statement",
+			    fun, non_constant_p, jump_target);
+  tree init = get_for_init_stmt (f);
+  if (!init)
+    return get_null_reflection ();
+  if (TREE_CODE (init) == STATEMENT_LIST)
+    {
+      tree_stmt_iterator it = tsi_start (init);
+      if (tsi_end_p (it))
+	return get_null_reflection ();
+      tree first = tsi_stmt (it);
+      tsi_next (&it);
+      if (tsi_end_p (it)
+	  || eval_is_declaration_statement (first) == boolean_true_node)
+	init = first;
+    }
+  {
+    tree inner = init;
+    while (inner && TREE_CODE (inner) == CLEANUP_POINT_EXPR)
+      inner = TREE_OPERAND (inner, 0);
+    if (inner && eval_is_statement (inner) != boolean_true_node)
+      init = build_stmt (EXPR_LOCATION (init), EXPR_STMT, inner);
+  }
+  return get_reflection_raw (loc, init, REFLECT_UNDEF);
+}
+
+static tree
+eval_increment_of (location_t loc, const constexpr_ctx *ctx, tree r,
+		   bool *non_constant_p, tree *jump_target, tree fun)
+{
+  tree f = get_loop_statement (r, FOR_STMT);
+  if (!f)
+    return throw_exception (loc, ctx,
+			    "reflection does not represent a for statement",
+			    fun, non_constant_p, jump_target);
+  tree inc = FOR_EXPR (f);
+  while (inc && (TREE_CODE (inc) == CLEANUP_POINT_EXPR
+		 || (CONVERT_EXPR_P (inc) && VOID_TYPE_P (TREE_TYPE (inc)))))
+    inc = TREE_OPERAND (inc, 0);
+  if (!inc)
+    return get_null_reflection ();
+  return get_reflection_raw_expression (loc, inc);
+}
+
+static tree
+eval_loop_body_of (location_t loc, const constexpr_ctx *ctx, tree r,
+		   bool *non_constant_p, tree *jump_target, tree fun)
+{
+  tree stmt = unwrap_statement_wrappers (r);
+  tree body = NULL_TREE;
+  if (stmt && TREE_CODE (stmt) == FOR_STMT)
+    body = FOR_BODY (stmt);
+  else if (stmt && TREE_CODE (stmt) == WHILE_STMT)
+    body = WHILE_BODY (stmt);
+  else if (stmt && TREE_CODE (stmt) == DO_STMT)
+    body = DO_BODY (stmt);
+  else
+    return throw_exception (loc, ctx,
+			    "reflection does not represent a loop statement",
+			    fun, non_constant_p, jump_target);
+
+  if (LOOP_BODY_COMPOUND_P (stmt))
+    return get_compound_statement_reflection_for (loc, stmt, body);
+  while (body && ((TREE_CODE (body) == BIND_EXPR && !BIND_EXPR_VARS (body))
+		  || (TREE_CODE (body) == STATEMENT_LIST
+		      && STATEMENT_LIST_TAIL (body))))
+    {
+      if (TREE_CODE (body) == BIND_EXPR)
+	body = BIND_EXPR_BODY (body);
+      else
+	{
+	  tree_stmt_iterator it = tsi_start (body);
+	  tree first = tsi_stmt (it);
+	  tsi_next (&it);
+	  if (!tsi_end_p (it))
+	    break;
+	  body = first;
+	}
+    }
+  if (!body || (TREE_CODE (body) == STATEMENT_LIST
+		&& !STATEMENT_LIST_TAIL (body)))
+    {
+      if (!null_stmt_markers)
+	null_stmt_markers = hash_map<tree, tree>::create_ggc (16);
+      if (tree *existing = null_stmt_markers->get (stmt))
+	return get_reflection_raw (loc, *existing, REFLECT_UNDEF);
+      tree marker = reflection_null_statement_marker (EXPR_LOCATION (stmt));
+      null_stmt_markers->put (stmt, marker);
+      return get_reflection_raw (loc, marker, REFLECT_UNDEF);
+    }
+  return get_reflection_raw (loc, body, REFLECT_UNDEF);
 }
 
 static tree
@@ -5302,6 +5487,20 @@ static tree
 eval_condition_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		   bool *non_constant_p, tree *jump_target, tree fun)
 {
+  tree stmt = unwrap_statement_wrappers (r);
+  if (stmt && (TREE_CODE (stmt) == FOR_STMT
+	       || TREE_CODE (stmt) == WHILE_STMT
+	       || TREE_CODE (stmt) == DO_STMT))
+    {
+      tree cond = (TREE_CODE (stmt) == FOR_STMT ? FOR_COND (stmt)
+		   : TREE_CODE (stmt) == WHILE_STMT ? WHILE_COND (stmt)
+		   : DO_COND (stmt));
+      while (cond && TREE_CODE (cond) == CLEANUP_POINT_EXPR)
+	cond = TREE_OPERAND (cond, 0);
+      if (!cond)
+	return get_null_reflection ();
+      return get_reflection_raw_expression (loc, cond);
+    }
   return eval_conditional_operand (loc, ctx, r, 0, non_constant_p, jump_target,
 				   fun);
 }
@@ -11121,6 +11320,23 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
     case METAFN_ELSE_STATEMENT_OF:
       return eval_else_statement_of (loc, ctx, h, non_constant_p, jump_target,
 				     fun);
+    case METAFN_IS_FOR_STATEMENT:
+      return eval_is_for_statement (h);
+    case METAFN_IS_WHILE_STATEMENT:
+      return eval_is_while_statement (h);
+    case METAFN_IS_DO_STATEMENT:
+      return eval_is_do_statement (h);
+    case METAFN_IS_BREAK_STATEMENT:
+      return eval_is_break_statement (h);
+    case METAFN_IS_CONTINUE_STATEMENT:
+      return eval_is_continue_statement (h);
+    case METAFN_INIT_STATEMENT_OF:
+      return eval_init_statement_of (loc, ctx, h, non_constant_p, jump_target,
+				     fun);
+    case METAFN_INCREMENT_OF:
+      return eval_increment_of (loc, ctx, h, non_constant_p, jump_target, fun);
+    case METAFN_LOOP_BODY_OF:
+      return eval_loop_body_of (loc, ctx, h, non_constant_p, jump_target, fun);
     case METAFN_IS_GOTO_STATEMENT:
       return eval_is_goto_statement (h);
     case METAFN_IS_LABEL_STATEMENT:

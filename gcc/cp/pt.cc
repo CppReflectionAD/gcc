@@ -20127,6 +20127,7 @@ tsubst_stmt (tree t, tree args, tsubst_flags_t complain, tree in_decl)
 
     case FOR_STMT:
       stmt = begin_for_stmt (NULL_TREE, NULL_TREE);
+      LOOP_BODY_COMPOUND_P (stmt) = LOOP_BODY_COMPOUND_P (t);
       RECUR (FOR_INIT_STMT (t));
       finish_init_stmt (stmt);
       tmp = RECUR (FOR_COND (t));
@@ -20192,6 +20193,7 @@ tsubst_stmt (tree t, tree args, tsubst_flags_t complain, tree in_decl)
 
     case WHILE_STMT:
       stmt = begin_while_stmt ();
+      LOOP_BODY_COMPOUND_P (stmt) = LOOP_BODY_COMPOUND_P (t);
       tmp = RECUR (WHILE_COND (t));
       finish_while_stmt_cond (tmp, stmt, false, 0, false);
       {
@@ -20204,6 +20206,7 @@ tsubst_stmt (tree t, tree args, tsubst_flags_t complain, tree in_decl)
 
     case DO_STMT:
       stmt = begin_do_stmt ();
+      LOOP_BODY_COMPOUND_P (stmt) = LOOP_BODY_COMPOUND_P (t);
       {
 	bool prev = note_iteration_stmt_body_start ();
 	RECUR (DO_BODY (t));

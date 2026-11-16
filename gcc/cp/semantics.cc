@@ -1846,7 +1846,73 @@ finish_for_stmt (tree for_stmt)
   tree range_for_decl[3] = { NULL_TREE, NULL_TREE, NULL_TREE };
   find_range_for_decls (range_for_decl);
 
-  add_stmt (do_poplevel (scope));
+  tree popped = do_poplevel (scope);
+  if (flag_reflection
+      && !processing_template_decl
+      && TREE_CODE (for_stmt) == FOR_STMT
+      && !FOR_INIT_STMT (for_stmt)
+      && popped)
+    {
+      tree inner = popped;
+      if (TREE_CODE (inner) == BIND_EXPR)
+	inner = BIND_EXPR_BODY (inner);
+      if (inner && TREE_CODE (inner) == STATEMENT_LIST
+	  && STATEMENT_LIST_TAIL (inner))
+	{
+	  tree_stmt_iterator last = tsi_last (inner);
+	  if (!tsi_end_p (last) && tsi_stmt (last) == for_stmt)
+	    {
+	      tsi_delink (&last);
+	      if (!tsi_end_p (tsi_start (inner)))
+		{
+		  tree_stmt_iterator it = tsi_start (inner);
+		  tree first = tsi_stmt (it);
+		  tsi_next (&it);
+		  FOR_INIT_STMT (for_stmt) = tsi_end_p (it) ? first : inner;
+		}
+	      if (popped == inner)
+		popped = for_stmt;
+	      else
+		BIND_EXPR_BODY (popped) = for_stmt;
+	    }
+	  else if (!tsi_end_p (last))
+	    {
+	      /* for_stmt is wrapped (e.g. by CLEANUP_STMT for an init var
+		 with a destructor).  Leave the AST intact for EH lowering and
+		 record the init statements for reflection.  */
+	      tree init = NULL_TREE;
+	      for (tree_stmt_iterator it = tsi_start (inner);
+		   it.ptr != last.ptr; tsi_next (&it))
+		append_to_statement_list_force (tsi_stmt (it), &init);
+	      if (init)
+		{
+		  tree_stmt_iterator it = tsi_start (init);
+		  tree first = tsi_stmt (it);
+		  tsi_next (&it);
+		  tree rec = tsi_end_p (it) ? first : init;
+		  if (TREE_CODE (popped) == BIND_EXPR
+		      && BIND_EXPR_VARS (popped)
+		      && !TREE_CHAIN (BIND_EXPR_VARS (popped))
+		      && TREE_CODE (rec) == CLEANUP_POINT_EXPR)
+		    {
+		      tree inner_rec = rec;
+		      while (inner_rec
+			     && TREE_CODE (inner_rec) == CLEANUP_POINT_EXPR)
+			inner_rec = TREE_OPERAND (inner_rec, 0);
+		      if (inner_rec && TREE_CODE (inner_rec) != INIT_EXPR
+			  && TREE_CODE (inner_rec) != DECL_EXPR)
+			{
+			  tree var = BIND_EXPR_VARS (popped);
+			  rec = build_stmt (DECL_SOURCE_LOCATION (var),
+					    DECL_EXPR, var);
+			}
+		    }
+		  FOR_STMT_REFLECT_INIT (for_stmt) = rec;
+		}
+	    }
+	}
+    }
+  add_stmt (popped);
 
   /* If we're being called from build_vec_init, don't mess with the names of
      the variables for an enclosing range-for.  */

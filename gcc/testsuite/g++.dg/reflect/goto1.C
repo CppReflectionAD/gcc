@@ -68,26 +68,12 @@ static_assert(identifier_of(label_of(stmt(^^jumps, 6))) == "done");
 // Different labels compare unequal.
 static_assert(label_of(stmt(^^jumps, 5)) != label_of(stmt(^^jumps, 1)));
 
-// The lowered while: [goto C, B:, body, C:, if (c) goto B; else goto X;, X:].
-// The labels have no identifier, but the gotos can be matched to them.
-static_assert(is_goto_statement(nested(^^w, 1, 0)));
-static_assert(is_label_statement(nested(^^w, 1, 1)));
-static_assert(is_label_statement(nested(^^w, 1, 3)));
-static_assert(is_if_statement(nested(^^w, 1, 4)));
-static_assert(is_label_statement(nested(^^w, 1, 5)));
-static_assert(!has_identifier(label_of(nested(^^w, 1, 1))));
-static_assert(label_of(nested(^^w, 1, 0)) == label_of(nested(^^w, 1, 3)));
-static_assert(label_of(true_expression_of(nested(^^w, 1, 4)))
-	      == label_of(nested(^^w, 1, 1)));
-static_assert(label_of(false_expression_of(nested(^^w, 1, 4)))
-	      == label_of(nested(^^w, 1, 5)));
-
-// A break jumps to the loop's exit label, the target of the condition's else.
-static_assert(is_if_statement(nested(^^w_break, 1, 2)));
-static_assert(label_of(true_expression_of(nested(^^w_break, 1, 2)))
-	      == label_of(false_expression_of(nested(^^w_break, 1, 5))));
-static_assert(label_of(true_expression_of(nested(^^w_break, 1, 2)))
-	      != label_of(true_expression_of(nested(^^w_break, 1, 5))));
+// Under Option 2, loops and break remain first-class statements rather than
+// lowered gotos and labels.
+static_assert(is_while_statement(stmt(^^w, 1)));
+static_assert(!is_goto_statement(stmt(^^w, 1)));
+static_assert(is_while_statement(stmt(^^w_break, 1)));
+static_assert(is_break_statement(true_expression_of(statements_of(loop_body_of(stmt(^^w_break, 1)))[0])));
 
 // Neither a goto nor a label.
 static_assert(!is_goto_statement(^^int));

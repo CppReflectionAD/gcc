@@ -544,6 +544,7 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       SPLICE_EXPR_TARGS_P (in SPLICE_EXPR)
       modify_expr_compound_code (in MODIFY_EXPR)
       IF_STMT_REFLECTION_KEPT_P (in IF_STMT)
+      LOOP_BODY_COMPOUND_P (in FOR_STMT, WHILE_STMT, DO_STMT)
    5: IDENTIFIER_VIRTUAL_P (in IDENTIFIER_NODE)
       FUNCTION_RVALUE_QUALIFIED (in FUNCTION_TYPE, METHOD_TYPE)
       BIND_EXPR_REFLECT_BODY (in BIND_EXPR)
@@ -6007,6 +6008,13 @@ decl_template_parm_check (const_tree t, const char *f, int l, const char *fn)
    cp_gimplify_expr makes that replacement.  */
 #define IF_STMT_REFLECTION_KEPT_P(NODE) \
   TREE_LANG_FLAG_4 (IF_STMT_CHECK (NODE))
+/* True on FOR_STMT, WHILE_STMT, or DO_STMT whose body was parsed as a
+   compound statement (brace-enclosed).  */
+#define LOOP_BODY_COMPOUND_P(NODE) \
+  TREE_LANG_FLAG_4 (TREE_CHECK3 (NODE, FOR_STMT, WHILE_STMT, DO_STMT))
+/* Holds the init-statement of a FOR_STMT after finish_for_stmt when the init
+   cannot be moved into FOR_INIT_STMT (e.g. due to CLEANUP_STMT).  */
+#define FOR_STMT_REFLECT_INIT(NODE) FOR_SCOPE (NODE)
 
 /* Like PACK_EXPANSION_EXTRA_ARGS, for constexpr if.  IF_SCOPE is used while
    building an IF_STMT; IF_STMT_EXTRA_ARGS is used after it is complete.  */

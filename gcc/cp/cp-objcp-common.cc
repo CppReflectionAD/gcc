@@ -460,6 +460,50 @@ has_c_linkage (const_tree decl)
   return DECL_EXTERN_C_P (decl);
 }
 
+/* Helper for cxx_block_may_fallthru: return non-NULL if *TP is a BREAK_STMT
+   or GOTO_EXPR that could exit the enclosing loop (skipping nested loops and
+   switches for BREAK_STMT).  */
+
+static tree
+loop_body_may_exit_r (tree *tp, int *walk_subtrees, void *data)
+{
+  tree t = *tp;
+  bool in_nested = data != NULL;
+  switch (TREE_CODE (t))
+    {
+    case BREAK_STMT:
+      return in_nested ? NULL_TREE : t;
+    case GOTO_EXPR:
+      return t;
+    case FOR_STMT:
+    case WHILE_STMT:
+    case DO_STMT:
+    case SWITCH_STMT:
+      if (!in_nested)
+	{
+	  for (int i = 0; i < TREE_OPERAND_LENGTH (t); ++i)
+	    if (tree op = TREE_OPERAND (t, i))
+	      if (cp_walk_tree_without_duplicates (&op, loop_body_may_exit_r,
+						   (void *) 1))
+		return t;
+	  *walk_subtrees = 0;
+	}
+      return NULL_TREE;
+    default:
+      if (IS_TYPE_OR_DECL_P (t))
+	*walk_subtrees = 0;
+      return NULL_TREE;
+    }
+}
+
+static bool
+loop_body_may_exit_p (const_tree body)
+{
+  tree t = const_cast<tree> (body);
+  return cp_walk_tree_without_duplicates (&t, loop_body_may_exit_r,
+					  NULL) != NULL_TREE;
+}
+
 /* Return true if stmt can fall through.  Used by block_may_fallthru
    default case.  */
 
@@ -487,6 +531,40 @@ cxx_block_may_fallthru (const_tree stmt)
       if (block_may_fallthru (THEN_CLAUSE (stmt)))
 	return true;
       return block_may_fallthru (ELSE_CLAUSE (stmt));
+
+    case FOR_STMT:
+      {
+	const_tree cond = FOR_COND (stmt);
+	if ((!cond || integer_nonzerop (cond))
+	    && !loop_body_may_exit_p (FOR_BODY (stmt)))
+	  return false;
+	return true;
+      }
+
+    case WHILE_STMT:
+      {
+	const_tree cond = WHILE_COND (stmt);
+	if (cond && integer_nonzerop (cond)
+	    && !loop_body_may_exit_p (WHILE_BODY (stmt)))
+	  return false;
+	return true;
+      }
+
+    case DO_STMT:
+      {
+	const_tree cond = DO_COND (stmt);
+	if (cond && integer_nonzerop (cond)
+	    && !loop_body_may_exit_p (DO_BODY (stmt)))
+	  return false;
+	if (cond && integer_zerop (cond)
+	    && !loop_body_may_exit_p (DO_BODY (stmt))
+	    && !block_may_fallthru (DO_BODY (stmt)))
+	  return false;
+	return true;
+      }
+
+    case SWITCH_STMT:
+      return true;
 
     case CLEANUP_STMT:
       /* Just handle the try/finally cases.  */
