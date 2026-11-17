@@ -3488,6 +3488,40 @@ eh_cleanup_p (tree handler)
 		       || TREE_CODE (handler) == EH_FILTER_EXPR));
 }
 
+/* The `if' of SCOPE, if SCOPE is a BIND_EXPR_REFLECT_IF_SCOPE that still
+   holds one, else SCOPE.  The `if' is the last statement of the scope, after
+   the declarations of its init-statement and condition, or of the body of the
+   TRY_FINALLY_EXPR that destroys a variable they declare.  */
+
+static tree
+if_of_if_scope (tree scope)
+{
+  if (!scope
+      || TREE_CODE (scope) != BIND_EXPR
+      || !BIND_EXPR_REFLECT_IF_SCOPE (scope))
+    return scope;
+  tree t = BIND_EXPR_BODY (scope);
+  while (t)
+    if (TREE_CODE (t) == STATEMENT_LIST)
+      {
+	tree last = NULL_TREE;
+	for (tree s : tsi_range (t))
+	  if (TREE_CODE (s) != DEBUG_BEGIN_STMT)
+	    last = s;
+	t = last;
+      }
+    else if (TREE_CODE (t) == TRY_FINALLY_EXPR
+	     || (TREE_CODE (t) == TRY_CATCH_EXPR
+		 && eh_cleanup_p (TREE_OPERAND (t, 1))))
+      t = TREE_OPERAND (t, 0);
+    else
+      break;
+  /* An `if consteval' is folded to the clause that is run.  */
+  if (t && (TREE_CODE (t) == COND_EXPR || TREE_CODE (t) == IF_STMT))
+    return t;
+  return scope;
+}
+
 /* True if STMT is a statement that the front end adds to a function body
    and that has no counterpart in the source:
    - the declaration of the flag that maybe_set_retval_sentinel creates for
@@ -4063,12 +4097,33 @@ eval_statements_of (location_t loc, const constexpr_ctx *ctx, tree r,
 
   vec<constructor_elt, va_gc> *elts = nullptr;
 
+  /* The scope of an `if' that declares a variable is the `if'.  Its parts are
+     the declarations of its init-statement and condition, as on clang, and
+     then its own.  */
+  if (tree if_stmt = if_of_if_scope (r); if_stmt != r)
+    {
+      tree body = BIND_EXPR_BODY (r);
+      if (TREE_CODE (body) == STATEMENT_LIST)
+	for (tree s : tsi_range (body))
+	  append_block_statement (loc, s, &elts);
+      else
+	append_block_statement (loc, body, &elts);
+      /* That gave the `if' last; give its parts instead.  */
+      if (elts && !elts->is_empty ()
+	  && REFLECT_EXPR_HANDLE (elts->last ().value) == if_stmt)
+	elts->pop ();
+      r = if_stmt;
+    }
+
   if (r && (TREE_CODE (r) == BIND_EXPR || TREE_CODE (r) == STATEMENT_LIST))
     {
-      /* A block in this one is one of its statements.  */
+      /* A block in this one is one of its statements, and so is the scope
+	 of an `if'.  */
       bool outer = true;
       while (r && TREE_CODE (r) == BIND_EXPR
-	     && (outer || !BIND_EXPR_REFLECT_BLOCK (r)))
+	     && (outer
+		 || (!BIND_EXPR_REFLECT_BLOCK (r)
+		     && !BIND_EXPR_REFLECT_IF_SCOPE (r))))
 	{
 	  r = BIND_EXPR_BODY (r);
 	  outer = false;
@@ -4264,8 +4319,10 @@ eval_is_compound_statement (tree r)
     return boolean_false_node;
   if (TREE_CODE (r) == STATEMENT_LIST)
     return boolean_true_node;
+  /* The scope of an `if' is the `if'.  */
   if (TREE_CODE (r) == BIND_EXPR)
-    return (!TREE_TYPE (r) || VOID_TYPE_P (TREE_TYPE (r)))
+    return ((!TREE_TYPE (r) || VOID_TYPE_P (TREE_TYPE (r)))
+	    && !BIND_EXPR_REFLECT_IF_SCOPE (r))
 	   ? boolean_true_node : boolean_false_node;
   return boolean_false_node;
 }
@@ -5083,7 +5140,7 @@ eval_conditional_operand (location_t loc, const constexpr_ctx *ctx, tree r,
 			  int opno, bool *non_constant_p, tree *jump_target,
 			  tree fun)
 {
-  tree cond = unwrap_statement_wrappers (r);
+  tree cond = unwrap_statement_wrappers (if_of_if_scope (r));
   if (!cond || TREE_CODE (cond) != COND_EXPR)
     return throw_exception (loc, ctx,
 			    "reflection does not represent a conditional "
@@ -11629,6 +11686,9 @@ compare_reflections (tree lhs, tree rhs)
   else if (lkind == REFLECT_ANNOTATION)
     return TREE_VALUE (lhs) == TREE_VALUE (rhs);
   else if (lkind == REFLECT_BASE)
+    return lhs == rhs;
+  else if (if_of_if_scope (lhs) != lhs || if_of_if_scope (rhs) != rhs)
+    /* The scope of an `if' is a statement, which is equal only to itself.  */
     return lhs == rhs;
   else if (eval_is_compound_statement (lhs) == boolean_true_node
 	   && eval_is_compound_statement (rhs) == boolean_true_node)

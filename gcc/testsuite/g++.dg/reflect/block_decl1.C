@@ -46,7 +46,8 @@ static_assert (!can_declared_variable_of (statements_of (body_of (^^f_binding))[
 
 // What a binding declares in a range-based for or an if's init-statement is
 // unchanged: each statement's kinds, one hex digit per statement, then the
-// number of statements.
+// number of statements.  The if is none of these kinds (cpp_reflection_ad#278),
+// and the binding is its first part.
 double f_for (P (&arr)[2]) { double s = 0; for (auto [a, b] : arr) s += a; return s; }
 double f_if (P p) { if (auto [a, b] = p; a > 0) return a; return p.b; }
 
@@ -67,4 +68,11 @@ kinds (info fn)
 }
 
 static_assert (kinds (^^f_for) == 0x1483);
-static_assert (kinds (^^f_if) == 0x482);
+static_assert (kinds (^^f_if) == 0x082);
+consteval info
+if_binding ()
+{
+  return statements_of (statements_of (body_of (^^f_if))[0])[0];
+}
+static_assert (kind (if_binding ()) == 1);
+static_assert (declarators_of (if_binding ()).empty ());
