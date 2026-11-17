@@ -2892,13 +2892,29 @@ expr_from_macro_expansion_r (tree *tp, int *, void *)
   return NULL_TREE;
 }
 
+/* Return T without the BIND_EXPRs around it that bind no variables and have
+   no BLOCK.  The C++ front end keeps such a BIND_EXPR for a block under
+   -freflection, so that std::meta::statements_of sees the block, but it
+   makes no scope.  */
+
+static tree
+strip_scopeless_bind_exprs (tree t)
+{
+  while (t
+	 && TREE_CODE (t) == BIND_EXPR
+	 && BIND_EXPR_VARS (t) == NULL_TREE
+	 && BIND_EXPR_BLOCK (t) == NULL_TREE)
+    t = BIND_EXPR_BODY (t);
+  return t;
+}
+
 /* Possibly warn when an if-else has identical branches.  */
 
 static void
 do_warn_duplicated_branches (tree expr)
 {
-  tree thenb = COND_EXPR_THEN (expr);
-  tree elseb = COND_EXPR_ELSE (expr);
+  tree thenb = strip_scopeless_bind_exprs (COND_EXPR_THEN (expr));
+  tree elseb = strip_scopeless_bind_exprs (COND_EXPR_ELSE (expr));
 
   /* Don't bother if any of the branches is missing.  */
   if (thenb == NULL_TREE || elseb == NULL_TREE)
