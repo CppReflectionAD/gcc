@@ -543,6 +543,7 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       SPLICE_EXPR_TARGS_P (in SPLICE_EXPR)
       modify_expr_compound_code (in MODIFY_EXPR)
       IF_STMT_REFLECTION_KEPT_P (in IF_STMT)
+      COND_EXPR_REFLECTION_NO_ELSE_P (in COND_EXPR)
    5: IDENTIFIER_VIRTUAL_P (in IDENTIFIER_NODE)
       FUNCTION_RVALUE_QUALIFIED (in FUNCTION_TYPE, METHOD_TYPE)
       BIND_EXPR_REFLECT_BODY (in BIND_EXPR)
@@ -825,6 +826,13 @@ typedef struct ptrmem_cst * ptrmem_cst_t;
 
 #define COND_EXPR_IS_VEC_DELETE(NODE) \
   TREE_LANG_FLAG_0 (COND_EXPR_CHECK (NODE))
+
+/* True on the COND_EXPR that genericize_if_stmt makes of an if with no else
+   under -freflection.  Its else arm is the empty statement genericize_if_stmt
+   adds for the gimplifier, which std::meta::statements_of and
+   false_expression_of leave out, since the if has no else part.  */
+#define COND_EXPR_REFLECTION_NO_ELSE_P(NODE) \
+  TREE_LANG_FLAG_4 (COND_EXPR_CHECK (NODE))
 
 /* Nonzero if this NOP_EXPR is a reinterpret_cast.  Such conversions
    are not constexprs.  Other NOP_EXPRs are.  */

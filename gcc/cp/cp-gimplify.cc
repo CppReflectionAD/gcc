@@ -304,6 +304,7 @@ genericize_if_stmt (tree *stmt_p)
       return;
     }
 
+  bool no_else = !else_;
   if (!then_)
     then_ = build_empty_stmt (locus);
   if (!else_)
@@ -328,7 +329,11 @@ genericize_if_stmt (tree *stmt_p)
   else if (constant_if_selects_clause_p (stmt))
     stmt = integer_nonzerop (cond) ? then_ : else_;
   else
-    stmt = build3 (COND_EXPR, void_type_node, cond, then_, else_);
+    {
+      stmt = build3 (COND_EXPR, void_type_node, cond, then_, else_);
+      if (flag_reflection && no_else)
+	COND_EXPR_REFLECTION_NO_ELSE_P (stmt) = true;
+    }
   protected_set_expr_location_if_unset (stmt, locus);
   *stmt_p = stmt;
 }
