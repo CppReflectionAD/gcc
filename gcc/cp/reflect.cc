@@ -5307,7 +5307,7 @@ eval_then_statement_of (location_t loc, const constexpr_ctx *ctx, tree r,
   tree op = (TREE_CODE (if_stmt) == IF_STMT
 	     ? THEN_CLAUSE (if_stmt)
 	     : TREE_OPERAND (if_stmt, 1));
-  op = strip_goto_prediction (op);
+  op = strip_debug_begin_stmts (strip_goto_prediction (op));
   if (!op || IS_EMPTY_STMT (op) || op == void_node)
     return get_compound_statement_reflection_for (loc, if_stmt, NULL_TREE);
   return get_reflection_raw (loc, op, REFLECT_UNDEF);
@@ -5325,7 +5325,7 @@ eval_else_statement_of (location_t loc, const constexpr_ctx *ctx, tree r,
   tree op = (TREE_CODE (if_stmt) == IF_STMT
 	     ? ELSE_CLAUSE (if_stmt)
 	     : TREE_OPERAND (if_stmt, 2));
-  op = strip_goto_prediction (op);
+  op = strip_debug_begin_stmts (strip_goto_prediction (op));
   if (!op || IS_EMPTY_STMT (op) || op == void_node)
     return get_null_reflection ();
   return get_reflection_raw (loc, op, REFLECT_UNDEF);
