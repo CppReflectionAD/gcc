@@ -5151,11 +5151,13 @@ eval_is_conditional_operator (tree r)
    or the void-typed COND_EXPR that genericization turns one into, including
    the `if (cond) goto body; else goto exit;` a lowered loop ends with.  A
    statement-level `c ? f () : g ();` is still inside its EXPR_STMT, so it
-   is not an if statement.  */
+   is not an if statement.  The scope of an if that declares a variable
+   represents the if.  */
 
 static tree
 get_if_statement (tree r)
 {
+  r = if_of_if_scope (r);
   while (r && TREE_CODE (r) == CLEANUP_POINT_EXPR)
     r = TREE_OPERAND (r, 0);
   if (!r)

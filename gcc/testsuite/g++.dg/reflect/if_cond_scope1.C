@@ -117,7 +117,10 @@ if_with (info fn, std::size_t n, std::size_t d)
       return false;
   return is_expression (condition_of (s))
 	 && is_statement (true_expression_of (s))
-	 && is_statement (false_expression_of (s));
+	 && is_statement (false_expression_of (s))
+	 && is_if_statement (s)
+	 && then_statement_of (s) == parts[n - 2]
+	 && else_statement_of (s) == parts[n - 1];
 }
 
 static_assert (if_with (^^cond_decl, 4, 1));
@@ -131,6 +134,7 @@ static_assert (if_with (^^in_template<long>, 4, 1));
 
 // The block that holds a declaration is still a compound statement.
 static_assert (is_compound_statement (statements_of (first (^^block_decl))[1]));
+static_assert (is_compound_statement (then_statement_of (first (^^block_decl))));
 static_assert (statements_of (statements_of (first (^^block_decl))[1]).size ()
 	       == 2);
 
@@ -143,6 +147,7 @@ inner_if ()
   return s.size () == 2 ? s[1] : info {};
 }
 static_assert (is_statement (inner_if ()) && !is_compound_statement (inner_if ()));
+static_assert (is_if_statement (inner_if ()));
 static_assert (statements_of (inner_if ()).size () == 4);
 static_assert (is_declaration_statement (statements_of (inner_if ())[0]));
 
