@@ -17208,11 +17208,18 @@ cp_parser_implicitly_scoped_statement (cp_parser* parser, bool *if_p,
   if (if_p != NULL)
     *if_p = false;
 
-  /* Mark if () ; with a special NOP_EXPR.  */
+  /* Mark if () ; with a special NOP_EXPR, or a null statement marker under
+     -freflection so then_statement_of / else_statement_of see `;'.  */
   if (cp_lexer_next_token_is (parser->lexer, CPP_SEMICOLON))
     {
       cp_lexer_consume_token (parser->lexer);
-      statement = add_stmt (build_empty_stmt (body_loc));
+      if (flag_reflection
+	  && at_function_scope_p ()
+	  && (guard_tinfo.keyword == RID_IF
+	      || guard_tinfo.keyword == RID_ELSE))
+	statement = add_stmt (reflection_null_statement_marker (body_loc));
+      else
+	statement = add_stmt (build_empty_stmt (body_loc));
 
       if (guard_tinfo.keyword == RID_IF
 	  && !cp_lexer_next_token_is_keyword (parser->lexer, RID_ELSE))

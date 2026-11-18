@@ -5167,6 +5167,63 @@ eval_false_expression_of (location_t loc, const constexpr_ctx *ctx, tree r,
 				   fun);
 }
 
+/* Cache synthetic BIND_EXPR wrappers for empty compound blocks so repeated
+   reflections compare equal.  */
+
+static GTY(()) hash_map<tree, tree> *compound_stmt_wrappers;
+
+static tree
+get_compound_statement_reflection_for (location_t loc, tree parent, tree block)
+{
+  if (block && (TREE_CODE (block) == BIND_EXPR
+		|| TREE_CODE (block) == STATEMENT_LIST))
+    return get_reflection_raw (loc, block, REFLECT_UNDEF);
+  tree key = block ? block : parent;
+  if (!compound_stmt_wrappers)
+    compound_stmt_wrappers = hash_map<tree, tree>::create_ggc (16);
+  if (tree *existing = compound_stmt_wrappers->get (key))
+    return get_reflection_raw (loc, *existing, REFLECT_UNDEF);
+  tree wrapper = build3_loc (loc, BIND_EXPR, void_type_node, NULL_TREE, block,
+			     NULL_TREE);
+  BIND_EXPR_REFLECT_BODY (wrapper) = 1;
+  compound_stmt_wrappers->put (key, wrapper);
+  return get_reflection_raw (loc, wrapper, REFLECT_UNDEF);
+}
+
+static tree
+eval_then_statement_of (location_t loc, const constexpr_ctx *ctx, tree r,
+			bool *non_constant_p, tree *jump_target, tree fun)
+{
+  tree if_stmt = get_if_statement (r);
+  if (!if_stmt)
+    return throw_exception (loc, ctx,
+			    "reflection does not represent an if statement",
+			    fun, non_constant_p, jump_target);
+  tree op = (TREE_CODE (if_stmt) == IF_STMT
+	     ? THEN_CLAUSE (if_stmt)
+	     : TREE_OPERAND (if_stmt, 1));
+  if (!op || IS_EMPTY_STMT (op) || op == void_node)
+    return get_compound_statement_reflection_for (loc, if_stmt, NULL_TREE);
+  return get_reflection_raw (loc, op, REFLECT_UNDEF);
+}
+
+static tree
+eval_else_statement_of (location_t loc, const constexpr_ctx *ctx, tree r,
+			bool *non_constant_p, tree *jump_target, tree fun)
+{
+  tree if_stmt = get_if_statement (r);
+  if (!if_stmt)
+    return throw_exception (loc, ctx,
+			    "reflection does not represent an if statement",
+			    fun, non_constant_p, jump_target);
+  tree op = (TREE_CODE (if_stmt) == IF_STMT
+	     ? ELSE_CLAUSE (if_stmt)
+	     : TREE_OPERAND (if_stmt, 2));
+  if (!op || IS_EMPTY_STMT (op) || op == void_node)
+    return get_null_reflection ();
+  return get_reflection_raw (loc, op, REFLECT_UNDEF);
+}
+
 static tree
 unwrap_call_expr (tree r)
 {
@@ -10822,6 +10879,12 @@ process_metafunction (const constexpr_ctx *ctx, tree fun, tree call,
 				       jump_target, fun);
     case METAFN_IS_IF_STATEMENT:
       return eval_is_if_statement (h);
+    case METAFN_THEN_STATEMENT_OF:
+      return eval_then_statement_of (loc, ctx, h, non_constant_p, jump_target,
+				     fun);
+    case METAFN_ELSE_STATEMENT_OF:
+      return eval_else_statement_of (loc, ctx, h, non_constant_p, jump_target,
+				     fun);
     case METAFN_IS_ACCESSIBLE:
       return eval_is_accessible (loc, ctx, h, kind, expr, call,
 				 non_constant_p, jump_target, fun);

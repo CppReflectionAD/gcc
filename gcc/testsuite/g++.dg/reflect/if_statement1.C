@@ -102,11 +102,31 @@ static_assert(!is_expression(stmt(^^abs_if, 0)));
 static_assert(!is_conditional_operator(stmt(^^abs_if, 0)));
 static_assert(cond_op(stmt(^^abs_if, 0)) == operators::op_greater);
 static_assert(is_return_statement(true_expression_of(stmt(^^abs_if, 0))));
+static_assert(is_return_statement(then_statement_of(stmt(^^abs_if, 0))));
+static_assert(else_statement_of(stmt(^^abs_if, 0)) == info{});
 static_assert(!is_if_statement(stmt(^^abs_if, 1)));
 
 static_assert(is_if_statement(stmt(^^abs_if_else, 0)));
 static_assert(cond_op(stmt(^^abs_if_else, 0)) == operators::op_less);
 static_assert(is_return_statement(false_expression_of(stmt(^^abs_if_else, 0))));
+static_assert(is_return_statement(then_statement_of(stmt(^^abs_if_else, 0))));
+static_assert(is_return_statement(else_statement_of(stmt(^^abs_if_else, 0))));
+
+void empty_and_null_branches(int c) {
+  if (c) ;
+  if (c) {}
+  if (c) up(); else ;
+  if (c) up(); else {}
+}
+static_assert(is_expression_statement(then_statement_of(stmt(^^empty_and_null_branches, 0))));
+static_assert(else_statement_of(stmt(^^empty_and_null_branches, 0)) == info{});
+static_assert(is_compound_statement(then_statement_of(stmt(^^empty_and_null_branches, 1))));
+static_assert(statements_of(then_statement_of(stmt(^^empty_and_null_branches, 1))).empty());
+static_assert(then_statement_of(stmt(^^empty_and_null_branches, 1))
+	      == then_statement_of(stmt(^^empty_and_null_branches, 1)));
+static_assert(is_expression_statement(else_statement_of(stmt(^^empty_and_null_branches, 2))));
+static_assert(is_compound_statement(else_statement_of(stmt(^^empty_and_null_branches, 3))));
+static_assert(statements_of(else_statement_of(stmt(^^empty_and_null_branches, 3))).empty());
 
 // A `?:` in a return, an assignment, an initializer or on its own is not an
 // if statement, nor is the `?:` itself.
