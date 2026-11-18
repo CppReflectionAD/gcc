@@ -3855,6 +3855,11 @@ cp_fold (tree x, fold_flags_t flags)
 	    }
 	}
 
+      /* A rebuilt subscript is still one.  */
+      if (code == INDIRECT_REF && x != org_x && INDIRECT_REF_P (x)
+	  && INDIRECT_REF_SUBSCRIPT_P (org_x))
+	INDIRECT_REF_SUBSCRIPT_P (x) = 1;
+
       gcc_assert (TREE_CODE (x) != COND_EXPR
 		  || !VOID_TYPE_P (TREE_TYPE (TREE_OPERAND (x, 0))));
       break;
@@ -3943,6 +3948,9 @@ cp_fold (tree x, fold_flags_t flags)
 	      if (code == MODIFY_EXPR)
 		set_modify_expr_compound_code
 		  (x, modify_expr_compound_code (org_x));
+	      if (code == POINTER_PLUS_EXPR && TREE_CODE (x) == POINTER_PLUS_EXPR
+		  && POINTER_PLUS_SUBTRACT_P (org_x))
+		POINTER_PLUS_SUBTRACT_P (x) = 1;
 	    }
 	  break;
 	}
@@ -3993,6 +4001,10 @@ cp_fold (tree x, fold_flags_t flags)
 	 `a op= b' for reflection.  */
       if (code == MODIFY_EXPR && x != org_x && TREE_CODE (x) == MODIFY_EXPR)
 	set_modify_expr_compound_code (x, modify_expr_compound_code (org_x));
+      if (code == POINTER_PLUS_EXPR && x != org_x
+	  && TREE_CODE (x) == POINTER_PLUS_EXPR
+	  && POINTER_PLUS_SUBTRACT_P (org_x))
+	POINTER_PLUS_SUBTRACT_P (x) = 1;
 
       /* This is only needed for -Wnonnull-compare and only if
 	 TREE_NO_WARNING (org_x), but to avoid that option affecting code
