@@ -4060,6 +4060,32 @@ append_block_statement (location_t loc, tree stmt,
 			  get_reflection_raw (loc, stmt, REFLECT_UNDEF));
 }
 
+/* With -gstatement-frontiers, the parser puts a DEBUG_BEGIN_STMT before
+   each statement, so a statement that is a part of another but isn't a
+   block, such as the then statement of an if, is a STATEMENT_LIST of the
+   marker and the statement, and would be reported as a compound statement.
+   Return that statement, as without the markers.  A block is left alone: it
+   has a BIND_EXPR, a marked statement list, or more than one statement.  */
+
+static tree
+strip_debug_begin_stmts (tree t)
+{
+  if (!t
+      || TREE_CODE (t) != STATEMENT_LIST
+      || STATEMENT_LIST_REFLECT_BLOCK (t))
+    return t;
+  tree stmt = NULL_TREE;
+  for (tree s : tsi_range (t))
+    {
+      if (TREE_CODE (s) == DEBUG_BEGIN_STMT)
+	continue;
+      if (stmt)
+	return t;
+      stmt = s;
+    }
+  return stmt ? stmt : t;
+}
+
 /* Process std::meta::statements_of.
    Returns: A vector of reflections of top-level statements in the block.
    Throws: meta::exception if the argument does not represent a block or statement.  */
@@ -4227,6 +4253,12 @@ eval_statements_of (location_t loc, const constexpr_ctx *ctx, tree r,
 				    get_reflection_raw (loc, TREE_OPERAND (r, 0), REFLECT_UNDEF));
 	}
     }
+
+  /* A part that is a statement is so whatever the debug flags.  */
+  if (elts)
+    for (constructor_elt &e : *elts)
+      REFLECT_EXPR_HANDLE (e.value)
+	= strip_debug_begin_stmts (REFLECT_EXPR_HANDLE (e.value));
 
   return get_vector_of_info_elts (elts);
 }
@@ -5242,7 +5274,8 @@ eval_conditional_operand (location_t loc, const constexpr_ctx *ctx, tree r,
 			    "conditional expression has no such operand",
 			    fun, non_constant_p, jump_target);
 
-  return get_reflection_raw_expression (loc, op);
+  /* The then or else statement of an if, whatever the debug flags.  */
+  return get_reflection_raw_expression (loc, strip_debug_begin_stmts (op));
 }
 
 /* Cache synthetic BIND_EXPR wrappers for empty compound blocks so repeated
@@ -5280,7 +5313,7 @@ eval_then_statement_of (location_t loc, const constexpr_ctx *ctx, tree r,
   tree op = (TREE_CODE (if_stmt) == IF_STMT
 	     ? THEN_CLAUSE (if_stmt)
 	     : TREE_OPERAND (if_stmt, 1));
-  op = strip_goto_prediction (op);
+  op = strip_debug_begin_stmts (strip_goto_prediction (op));
   if (!op || IS_EMPTY_STMT (op) || op == void_node)
     return get_compound_statement_reflection_for (loc, if_stmt, NULL_TREE);
   return get_reflection_raw (loc, op, REFLECT_UNDEF);
@@ -5298,7 +5331,7 @@ eval_else_statement_of (location_t loc, const constexpr_ctx *ctx, tree r,
   tree op = (TREE_CODE (if_stmt) == IF_STMT
 	     ? ELSE_CLAUSE (if_stmt)
 	     : TREE_OPERAND (if_stmt, 2));
-  op = strip_goto_prediction (op);
+  op = strip_debug_begin_stmts (strip_goto_prediction (op));
   if (!op || IS_EMPTY_STMT (op) || op == void_node)
     return get_null_reflection ();
   return get_reflection_raw (loc, op, REFLECT_UNDEF);
