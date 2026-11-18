@@ -460,6 +460,7 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       OLD_PARM_DECL_P (in PARM_DECL)
       COMPONENT_REF_SPLICE_P (in COMPONENT_REF)
       TYPE_DECL_OPAQUE_ALIAS_P (in TYPE_DECL)
+      POINTER_PLUS_SUBTRACT_P (in POINTER_PLUS_EXPR)
    1: IDENTIFIER_KIND_BIT_1 (in IDENTIFIER_NODE)
       TI_PENDING_TEMPLATE_FLAG.
       TEMPLATE_PARMS_FOR_INLINE.
@@ -555,6 +556,7 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       DECL_NONTRIVIALLY_INITIALIZED_P (in VAR_DECL)
       RANGE_FOR_IVDEP (in RANGE_FOR_STMT)
       CALL_EXPR_OPERATOR_SYNTAX (in CALL_EXPR, AGGR_INIT_EXPR)
+      INDIRECT_REF_SUBSCRIPT_P (in INDIRECT_REF)
       CONSTRUCTOR_IS_DESIGNATED_INIT (in CONSTRUCTOR)
       OVL_NAME_INDEPENDENT_DECL_P (in OVERLOAD)
 
@@ -4574,6 +4576,18 @@ struct GTY(()) lang_decl {
    call.  */
 #define CALL_EXPR_OPERATOR_SYNTAX(NODE) \
   TREE_LANG_FLAG_6 (CALL_OR_AGGR_INIT_CHECK (NODE))
+
+/* True if the INDIRECT_REF NODE is a subscript of a pointer, `p[i]', which
+   cp_build_array_ref builds as `*(p + i)'.  Set only under -freflection,
+   so that reflection reports the subscript as written.  */
+#define INDIRECT_REF_SUBSCRIPT_P(NODE) \
+  TREE_LANG_FLAG_6 (INDIRECT_REF_CHECK (NODE))
+
+/* True if the POINTER_PLUS_EXPR NODE was built from `p - i' (MINUS_EXPR),
+   with a negated offset.  Set only under -freflection so pointer arithmetic
+   reflection does not mistake it for `p + (-i)`.  */
+#define POINTER_PLUS_SUBTRACT_P(NODE) \
+  TREE_LANG_FLAG_0 (POINTER_PLUS_EXPR_CHECK (NODE))
 
 /* A TREE_LIST containing the result of phase 1 name lookup of the operator
    overloads that are pertinent to the dependent operator expression whose
