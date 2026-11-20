@@ -21,6 +21,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libc6-dev \
       libgmp-dev \
       libgmp10 \
+      libisl-dev \
+      libisl23 \
       libmpc-dev \
       libmpc3 \
       libmpfr-dev \
