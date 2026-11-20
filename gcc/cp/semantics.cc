@@ -1419,7 +1419,10 @@ finish_if_stmt (tree if_stmt)
       cp_walk_tree_without_duplicates (&ELSE_CLAUSE (if_stmt),
 				       maybe_mark_exp_read_r, NULL);
     }
-  add_stmt (do_poplevel (scope));
+  scope = do_poplevel (scope);
+  if (flag_reflection && TREE_CODE (scope) == BIND_EXPR)
+    BIND_EXPR_REFLECT_IF_SCOPE (scope) = 1;
+  add_stmt (scope);
 }
 
 /* True if T has only what -freflection adds to the tree and isn't there
