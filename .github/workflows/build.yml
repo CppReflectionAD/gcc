@@ -56,18 +56,38 @@ jobs:
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build flex bison libgmp-dev libmpfr-dev libmpc-dev libisl-dev texinfo zlib1g-dev gperf dejagnu z3
+          sudo apt-get install -y build-essential ccache cmake ninja-build flex bison libgmp-dev libmpfr-dev libmpc-dev libisl-dev texinfo zlib1g-dev gperf dejagnu z3
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-${{ matrix.arch }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ matrix.arch }}-
 
       - name: Configure GCC
         run: |
+          ccache --set-config=max_size=4G
+          ccache --set-config=compression=true
+          ccache --set-config=hash_dir=false
+          ccache --set-config=sloppiness=locale,time_macros
+          ccache --zero-stats
           mkdir build
           cd build
-          ../configure --prefix=/opt/gcc --enable-languages=c,c++ --disable-bootstrap --disable-multilib --disable-nls --with-isl
+          CC="ccache gcc" CXX="ccache g++" ../configure \
+            --prefix=/opt/gcc \
+            --enable-languages=c,c++ \
+            --disable-bootstrap \
+            --disable-multilib \
+            --disable-nls \
+            --with-isl
 
       - name: Build GCC
         run: |
           cd build
           make -j$(nproc)
+          ccache --show-stats
 
       - name: Test Reflection
         run: |
