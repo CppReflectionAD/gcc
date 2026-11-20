@@ -1849,7 +1849,44 @@ finish_for_stmt (tree for_stmt)
   tree range_for_decl[3] = { NULL_TREE, NULL_TREE, NULL_TREE };
   find_range_for_decls (range_for_decl);
 
-  add_stmt (do_poplevel (scope));
+  tree popped = do_poplevel (scope);
+  if (flag_reflection
+      && !processing_template_decl
+      && TREE_CODE (for_stmt) == FOR_STMT
+      && !FOR_INIT_STMT (for_stmt)
+      && popped)
+    {
+      tree inner = popped;
+      if (TREE_CODE (inner) == BIND_EXPR)
+	inner = BIND_EXPR_BODY (inner);
+      if (inner && TREE_CODE (inner) == STATEMENT_LIST
+	  && STATEMENT_LIST_TAIL (inner))
+	{
+	  tree_stmt_iterator last = tsi_last (inner);
+	  if (!tsi_end_p (last) && tsi_stmt (last) == for_stmt)
+	    {
+	      tsi_delink (&last);
+	      if (!tsi_end_p (tsi_start (inner)))
+		{
+		  tree_stmt_iterator it = tsi_start (inner);
+		  tree first = tsi_stmt (it);
+		  tsi_next (&it);
+		  FOR_INIT_STMT (for_stmt) = tsi_end_p (it) ? first : inner;
+		}
+	      if (popped == inner)
+		popped = for_stmt;
+	      else
+		BIND_EXPR_BODY (popped) = for_stmt;
+	    }
+	  else if (!tsi_end_p (last) && TREE_CODE (popped) == BIND_EXPR)
+	    /* for_stmt is wrapped (e.g. by CLEANUP_STMT for an init var
+	       with a destructor).  Leave the AST intact for EH lowering and
+	       mark the sk_for BIND_EXPR so reflection treats it as the `for'
+	       statement itself and extracts the init from its body.  */
+	    BIND_EXPR_REFLECT_FOR_SCOPE (popped) = 1;
+	}
+    }
+  add_stmt (popped);
 
   /* If we're being called from build_vec_init, don't mess with the names of
      the variables for an enclosing range-for.  */

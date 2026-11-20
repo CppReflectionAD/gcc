@@ -2892,6 +2892,20 @@ expr_from_macro_expansion_r (tree *tp, int *, void *)
   return NULL_TREE;
 }
 
+/* Callback for do_warn_duplicated_branches to find kept front-end
+   statements (such as SWITCH_STMT or loops kept under -freflection).  */
+
+static tree
+expr_has_fe_stmt_r (tree *tp, int *walk_subtrees, void *)
+{
+  if (TREE_CODE (*tp) >= NUM_TREE_CODES
+      && TREE_CODE_CLASS (TREE_CODE (*tp)) == tcc_statement)
+    return *tp;
+  if (IS_TYPE_OR_DECL_P (*tp))
+    *walk_subtrees = 0;
+  return NULL_TREE;
+}
+
 /* Possibly warn when an if-else has identical branches.  */
 
 static void
@@ -2913,6 +2927,13 @@ do_warn_duplicated_branches (tree expr)
   /* ... or empty branches.  */
   if (TREE_CODE (thenb) == STATEMENT_LIST
       && STATEMENT_LIST_HEAD (thenb) == NULL)
+    return;
+
+  /* Front-end statements (such as SWITCH_STMT or loops kept through
+     cp_genericize under -freflection) may have type operands or produce
+     distinct labels when lowered, so skip branches containing them.  */
+  if (walk_tree_without_duplicates (&thenb, expr_has_fe_stmt_r, NULL)
+      || walk_tree_without_duplicates (&elseb, expr_has_fe_stmt_r, NULL))
     return;
 
   /* Compute the hash of the then branch.  */
