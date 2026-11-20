@@ -141,24 +141,22 @@ static_assert(!is_if_statement(^^int));
 static_assert(!is_if_statement(^^abs_if));
 static_assert(!is_if_statement(info{}));
 
-// A loop is lowered to a compound statement ending in
-// `if (cond) goto body; else goto exit;`, which is an if statement whose
-// condition is the loop's.
-static_assert(is_compound_statement(stmt(^^w, 1)));
+// Loops are preserved as loop statements; condition_of accepts them directly.
+static_assert(is_while_statement(stmt(^^w, 1)));
 static_assert(!is_if_statement(stmt(^^w, 1)));
-static_assert(ifs_in(stmt(^^w, 1)).size() == 1);
-static_assert(cond_op(ifs_in(stmt(^^w, 1))[0]) == operators::op_less);
+static_assert(cond_op(stmt(^^w, 1)) == operators::op_less);
 
-static_assert(ifs_in(stmt(^^dw, 1)).size() == 1);
-static_assert(cond_op(ifs_in(stmt(^^dw, 1))[0]) == operators::op_less);
+static_assert(is_do_statement(stmt(^^dw, 1)));
+static_assert(cond_op(stmt(^^dw, 1)) == operators::op_less);
 
-static_assert(ifs_in(stmt(^^f, 1)).size() == 1);
-static_assert(cond_op(ifs_in(stmt(^^f, 1))[0]) == operators::op_less);
+static_assert(is_for_statement(stmt(^^f, 1)));
+static_assert(cond_op(stmt(^^f, 1)) == operators::op_less);
 
-// A break is an if too: the break's comes first, then the loop's.
-static_assert(ifs_in(stmt(^^w_break, 1)).size() == 2);
-static_assert(cond_op(ifs_in(stmt(^^w_break, 1))[0]) == operators::op_greater);
-static_assert(cond_op(ifs_in(stmt(^^w_break, 1))[1]) == operators::op_less);
+static_assert(is_while_statement(stmt(^^w_break, 1)));
+static_assert(cond_op(stmt(^^w_break, 1)) == operators::op_less);
+static_assert(ifs_in(loop_body_of(stmt(^^w_break, 1))).size() == 1);
+static_assert(cond_op(ifs_in(loop_body_of(stmt(^^w_break, 1)))[0])
+	      == operators::op_greater);
 
 // condition_of still rejects what is neither.
 consteval bool rejects_non_conditional() {

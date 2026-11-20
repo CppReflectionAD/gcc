@@ -783,6 +783,44 @@ is_call_operator_fn (tree call)
 	  && DECL_OVERLOADED_OPERATOR_IS (fn, CALL_EXPR));
 }
 
+/* Lower control-flow statements (loops, switch, break, continue) that were
+   preserved through cp_genericize for reflection.  */
+
+static tree
+cp_genericize_control_r (tree *stmt_p, int *walk_subtrees, void *data)
+{
+  tree stmt = *stmt_p;
+  hash_set<tree> *p_set = (hash_set<tree> *) data;
+  if (TREE_CODE (stmt) == STATEMENT_LIST)
+    {
+      c_genericize_control_stmt (stmt_p, walk_subtrees, data,
+				 cp_genericize_control_r, cp_walk_subtrees);
+      return NULL_TREE;
+    }
+  if (p_set->add (stmt))
+    {
+      *walk_subtrees = 0;
+      return NULL_TREE;
+    }
+  switch (TREE_CODE (stmt))
+    {
+    case FOR_STMT:
+    case WHILE_STMT:
+    case DO_STMT:
+    case SWITCH_STMT:
+    case CONTINUE_STMT:
+    case BREAK_STMT:
+      c_genericize_control_stmt (stmt_p, walk_subtrees, data,
+				 cp_genericize_control_r, cp_walk_subtrees);
+      break;
+    default:
+      if (IS_TYPE_OR_DECL_P (stmt))
+	*walk_subtrees = 0;
+      break;
+    }
+  return NULL_TREE;
+}
+
 /* Do C++-specific gimplification.  Args are as for gimplify_expr.  */
 
 int
@@ -1001,6 +1039,13 @@ cp_gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
     case SWITCH_STMT:
     case CONTINUE_STMT:
     case BREAK_STMT:
+      if (flag_reflection)
+	{
+	  hash_set<tree> p_set;
+	  cp_walk_tree (expr_p, cp_genericize_control_r, &p_set, NULL);
+	  ret = GS_OK;
+	  break;
+	}
       gcc_unreachable ();
 
     case OMP_FOR:
@@ -1497,6 +1542,7 @@ struct cp_genericize_data
   tree try_block;
   bool no_sanitize_p;
   bool handle_invisiref_parm_p;
+  bool in_omp_loop;
 };
 
 /* Emit an error about taking the address of an immediate function.
@@ -2781,16 +2827,29 @@ cp_genericize_r (tree *stmt_p, int *walk_subtrees, void *data)
     case SWITCH_STMT:
     case CONTINUE_STMT:
     case BREAK_STMT:
+      /* Under -freflection, defer lowering control statements until
+	 cp_gimplify_expr so reflect.cc can inspect the intact AST.  */
+      if (flag_reflection && !wtd->in_omp_loop)
+	break;
+      c_genericize_control_stmt (stmt_p, walk_subtrees, data,
+				 cp_genericize_r, cp_walk_subtrees);
+      break;
+
     case OMP_FOR:
     case OMP_SIMD:
     case OMP_LOOP:
     case OMP_TILE:
     case OMP_UNROLL:
     case OACC_LOOP:
-      /* These cases are handled by shared code.  */
-      c_genericize_control_stmt (stmt_p, walk_subtrees, data,
-				 cp_genericize_r, cp_walk_subtrees);
-      break;
+      {
+	/* These cases are handled by shared code.  */
+	bool saved_in_omp_loop = wtd->in_omp_loop;
+	wtd->in_omp_loop = true;
+	c_genericize_control_stmt (stmt_p, walk_subtrees, data,
+				   cp_genericize_r, cp_walk_subtrees);
+	wtd->in_omp_loop = saved_in_omp_loop;
+	break;
+      }
 
     case STATEMENT_LIST:
       /* As above, handled by shared code.  */
@@ -2852,6 +2911,7 @@ cp_genericize_tree (tree* t_p, bool handle_invisiref_parm_p)
   wtd.try_block = NULL_TREE;
   wtd.no_sanitize_p = false;
   wtd.handle_invisiref_parm_p = handle_invisiref_parm_p;
+  wtd.in_omp_loop = false;
   cp_walk_tree (t_p, cp_genericize_r, &wtd, NULL);
   delete wtd.p_set;
   if (sanitize_flags_p (SANITIZE_VPTR))

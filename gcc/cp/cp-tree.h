@@ -544,6 +544,7 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       SPLICE_EXPR_TARGS_P (in SPLICE_EXPR)
       modify_expr_compound_code (in MODIFY_EXPR)
       IF_STMT_REFLECTION_KEPT_P (in IF_STMT)
+      LOOP_BODY_COMPOUND_P (in FOR_STMT, WHILE_STMT, DO_STMT)
    5: IDENTIFIER_VIRTUAL_P (in IDENTIFIER_NODE)
       FUNCTION_RVALUE_QUALIFIED (in FUNCTION_TYPE, METHOD_TYPE)
       BIND_EXPR_REFLECT_BODY (in BIND_EXPR)
@@ -553,6 +554,7 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       DECL_NTTP_OBJECT_P (in VAR_DECL)
    6: TYPE_MARKED_P (in _TYPE)
       DECL_NONTRIVIALLY_INITIALIZED_P (in VAR_DECL)
+      BIND_EXPR_REFLECT_FOR_SCOPE (in BIND_EXPR)
       RANGE_FOR_IVDEP (in RANGE_FOR_STMT)
       CALL_EXPR_OPERATOR_SYNTAX (in CALL_EXPR, AGGR_INIT_EXPR)
       INDIRECT_REF_SUBSCRIPT_P (in INDIRECT_REF)
@@ -807,6 +809,11 @@ typedef struct ptrmem_cst * ptrmem_cst_t;
    gives it a BIND_EXPR, marked too.  */
 #define BIND_EXPR_REFLECT_BLOCK(NODE) \
   TREE_LANG_FLAG_4 (BIND_EXPR_CHECK (NODE))
+/* Under -freflection, the scope of a `for' whose init-statement declares a
+   variable with a cleanup.  std::meta::statements_of reports it as the `for'
+   statement itself, and init_statement_of extracts the init from its body.  */
+#define BIND_EXPR_REFLECT_FOR_SCOPE(NODE) \
+  TREE_LANG_FLAG_6 (BIND_EXPR_CHECK (NODE))
 #define STATEMENT_LIST_REFLECT_BLOCK(NODE) \
   TREE_LANG_FLAG_4 (STATEMENT_LIST_CHECK (NODE))
 
@@ -6008,6 +6015,10 @@ decl_template_parm_check (const_tree t, const char *f, int l, const char *fn)
    cp_gimplify_expr makes that replacement.  */
 #define IF_STMT_REFLECTION_KEPT_P(NODE) \
   TREE_LANG_FLAG_4 (IF_STMT_CHECK (NODE))
+/* True on FOR_STMT, WHILE_STMT, or DO_STMT whose body was parsed as a
+   compound statement (brace-enclosed).  */
+#define LOOP_BODY_COMPOUND_P(NODE) \
+  TREE_LANG_FLAG_4 (TREE_CHECK3 (NODE, FOR_STMT, WHILE_STMT, DO_STMT))
 
 /* Like PACK_EXPANSION_EXTRA_ARGS, for constexpr if.  IF_SCOPE is used while
    building an IF_STMT; IF_STMT_EXTRA_ARGS is used after it is complete.  */
