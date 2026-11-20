@@ -105,6 +105,16 @@ jobs:
             exit 1
           fi
 
+      - name: Upload reflection test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gcc-reflect-tests-${{ matrix.arch }}
+          path: |
+            build/gcc/testsuite/g++/g++.sum
+            build/gcc/testsuite/g++/g++.log
+          if-no-files-found: ignore
+
       - name: Install into staging dir
         if: github.event_name != 'pull_request'
         run: |
