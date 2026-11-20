@@ -67,9 +67,19 @@ jobs:
 
       - name: Test Reflection
         run: |
+          set -euo pipefail
           cd build/gcc
-          make check-g++ RUNTESTFLAGS="dg.exp=reflect/*.C"
-          ! grep -E '^(FAIL|XPASS|UNRESOLVED|ERROR):' testsuite/g++/g++.sum
+          make -j"$(nproc)" check-g++ RUNTESTFLAGS="dg.exp=reflect/*.C" || true
+          sum=testsuite/g++/g++.sum
+          if ! grep -q '^# of expected passes' "$sum"; then
+            echo "::error::No reflection tests ran; see g++.log in the job's artifacts"
+            exit 1
+          fi
+          grep '^# of ' "$sum"
+          if grep -E '^(FAIL|XPASS|UNRESOLVED|ERROR):' "$sum"; then
+            echo "::error::GCC's reflection tests failed; see g++.sum and g++.log in the job's artifacts"
+            exit 1
+          fi
 
       - name: Install into staging dir
         if: github.event_name != 'pull_request'
