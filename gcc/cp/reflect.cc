@@ -3450,6 +3450,8 @@ eval_has_body (tree r)
   return boolean_true_node;
 }
 
+static tree unwrap_for_scope (tree);
+
 /* Process std::meta::body_of.
    Returns: The reflection of the body of the function represented by r.
    Throws: meta::exception unless r represents a function and is defined.  */
@@ -3473,7 +3475,10 @@ eval_body_of (location_t loc, const constexpr_ctx *ctx, tree r,
      statement, since pop_stmt_list takes the one statement out of a list,
      so give it a block too.  */
   if ((TREE_CODE (body) != BIND_EXPR && TREE_CODE (body) != STATEMENT_LIST)
-      || (TREE_CODE (body) == BIND_EXPR && BIND_EXPR_REFLECT_BLOCK (body)))
+      || (TREE_CODE (body) == BIND_EXPR
+	  && (BIND_EXPR_REFLECT_BLOCK (body)
+	      || BIND_EXPR_REFLECT_FOR_SCOPE (body)
+	      || unwrap_for_scope (body) != body)))
     {
       body = build3_loc (DECL_SOURCE_LOCATION (r), BIND_EXPR, void_type_node,
 			 NULL_TREE, body, NULL_TREE);
@@ -3601,13 +3606,6 @@ reflection_record_constructor_init (tree var, tree call)
   split_initializers->put (var, init);
 }
 
-static tree
-get_for_init_stmt (tree for_stmt)
-{
-  if (FOR_INIT_STMT (for_stmt))
-    return FOR_INIT_STMT (for_stmt);
-  return FOR_STMT_REFLECT_INIT (for_stmt);
-}
 /* A static local with a dynamic initializer is split too: expand_static_init
    declares it without an initializer and initializes it in an `if' on its
    guard variable, after the declaration.  Map each guard variable to its
@@ -3980,32 +3978,58 @@ static tree eval_is_return_statement (tree);
 static tree eval_is_declaration_statement (tree);
 static tree declared_var_of_stmt (tree);
 
-/* If STMT is a sk_for BIND_EXPR created for a for-statement's
-   init-declaration, unwrap it to the FOR_STMT itself so statements_of reports
-   the for-statement directly rather than a synthetic block.  */
+/* The FOR_STMT of SCOPE if SCOPE is a BIND_EXPR_REFLECT_FOR_SCOPE, else
+   SCOPE.  */
 
 static tree
-unwrap_for_scope (tree stmt)
+for_of_for_scope (tree scope)
 {
-  if (!stmt || TREE_CODE (stmt) != BIND_EXPR)
-    return stmt;
-  tree body = BIND_EXPR_BODY (stmt);
-  if (!body)
-    return stmt;
-  if (TREE_CODE (body) == FOR_STMT)
-    return body;
+  if (!scope
+      || TREE_CODE (scope) != BIND_EXPR
+      || !BIND_EXPR_REFLECT_FOR_SCOPE (scope))
+    return scope;
+  tree body = BIND_EXPR_BODY (scope);
   while (body)
     {
       if (TREE_CODE (body) == STATEMENT_LIST && STATEMENT_LIST_TAIL (body))
-	body = tsi_stmt (tsi_last (body));
-      else if (TREE_CODE (body) == TRY_FINALLY_EXPR)
+	{
+	  tree last = NULL_TREE;
+	  for (tree s : tsi_range (body))
+	    if (TREE_CODE (s) != DEBUG_BEGIN_STMT)
+	      last = s;
+	  body = last;
+	}
+      else if (TREE_CODE (body) == TRY_FINALLY_EXPR
+	       || (TREE_CODE (body) == TRY_CATCH_EXPR
+		   && eh_cleanup_p (TREE_OPERAND (body, 1))))
 	body = TREE_OPERAND (body, 0);
       else if (TREE_CODE (body) == CLEANUP_STMT)
 	body = CLEANUP_BODY (body);
       else
 	break;
     }
-  if (body && TREE_CODE (body) == FOR_STMT && FOR_STMT_REFLECT_INIT (body))
+  if (body && TREE_CODE (body) == FOR_STMT)
+    return body;
+  return scope;
+}
+
+/* If STMT is a sk_for BIND_EXPR created for a for-statement's
+   init-declaration without a cleanup, unwrap it to the FOR_STMT itself so
+   statements_of reports the for-statement directly rather than a synthetic
+   block.  */
+
+static tree
+unwrap_for_scope (tree stmt)
+{
+  if (!stmt
+      || TREE_CODE (stmt) != BIND_EXPR
+      || BIND_EXPR_REFLECT_BLOCK (stmt)
+      || BIND_EXPR_REFLECT_BODY (stmt)
+      || BIND_EXPR_REFLECT_FOR_SCOPE (stmt)
+      || !BIND_EXPR_VARS (stmt))
+    return stmt;
+  tree body = BIND_EXPR_BODY (stmt);
+  if (body && TREE_CODE (body) == FOR_STMT)
     return body;
   return stmt;
 }
@@ -4117,10 +4141,14 @@ eval_statements_of (location_t loc, const constexpr_ctx *ctx, tree r,
 
   if (r && (TREE_CODE (r) == BIND_EXPR || TREE_CODE (r) == STATEMENT_LIST))
     {
-      /* A block in this one is one of its statements.  */
+      /* A block in this one is one of its statements, and so is the scope
+	 of a `for' that declares a variable.  */
       bool outer = true;
       while (r && TREE_CODE (r) == BIND_EXPR
-	     && (outer || !BIND_EXPR_REFLECT_BLOCK (r)))
+	     && (outer
+		 || (!BIND_EXPR_REFLECT_BLOCK (r)
+		     && !BIND_EXPR_REFLECT_FOR_SCOPE (r)
+		     && unwrap_for_scope (r) == r)))
 	{
 	  r = BIND_EXPR_BODY (r);
 	  outer = false;
@@ -4318,7 +4346,9 @@ eval_is_compound_statement (tree r)
   if (TREE_CODE (r) == STATEMENT_LIST)
     return boolean_true_node;
   if (TREE_CODE (r) == BIND_EXPR)
-    return (!TREE_TYPE (r) || VOID_TYPE_P (TREE_TYPE (r)))
+    return ((!TREE_TYPE (r) || VOID_TYPE_P (TREE_TYPE (r)))
+	    && !BIND_EXPR_REFLECT_FOR_SCOPE (r)
+	    && unwrap_for_scope (r) == r)
 	   ? boolean_true_node : boolean_false_node;
   return boolean_false_node;
 }
@@ -5221,8 +5251,12 @@ static GTY(()) hash_map<tree, tree> *null_stmt_markers;
 static tree
 get_compound_statement_reflection_for (location_t loc, tree parent, tree block)
 {
-  if (block && (TREE_CODE (block) == BIND_EXPR
-		|| TREE_CODE (block) == STATEMENT_LIST))
+  if (block
+      && ((TREE_CODE (block) == BIND_EXPR
+	   && !BIND_EXPR_REFLECT_BLOCK (block)
+	   && !BIND_EXPR_REFLECT_FOR_SCOPE (block)
+	   && unwrap_for_scope (block) == block)
+	  || TREE_CODE (block) == STATEMENT_LIST))
     return get_reflection_raw (loc, block, REFLECT_UNDEF);
   tree key = block ? block : parent;
   if (!compound_stmt_wrappers)
@@ -5300,13 +5334,32 @@ eval_conditional_operand (location_t loc, const constexpr_ctx *ctx, tree r,
   return get_reflection_raw_expression (loc, op);
 }
 
+/* Return the FOR_STMT, WHILE_STMT, or DO_STMT that R represents, or
+   NULL_TREE.  Unlike unwrap_statement_wrappers, this does not look through
+   a compound-statement block `{ loop; }', only a CLEANUP_POINT_EXPR or a
+   for-loop's synthetic sk_for scope.  */
+
+static tree
+get_any_loop_statement (tree r)
+{
+  while (r && TREE_CODE (r) == CLEANUP_POINT_EXPR)
+    r = TREE_OPERAND (r, 0);
+  r = for_of_for_scope (r);
+  r = unwrap_for_scope (r);
+  if (r && (TREE_CODE (r) == FOR_STMT
+	    || TREE_CODE (r) == WHILE_STMT
+	    || TREE_CODE (r) == DO_STMT))
+    return r;
+  return NULL_TREE;
+}
+
 /* Return the FOR_STMT, WHILE_STMT, or DO_STMT (as CODE says) that R
    represents, or NULL_TREE.  */
 
 static tree
 get_loop_statement (tree r, tree_code code)
 {
-  r = unwrap_statement_wrappers (r);
+  r = get_any_loop_statement (r);
   if (r && TREE_CODE (r) == code)
     return r;
   return NULL_TREE;
@@ -5351,12 +5404,52 @@ static tree
 eval_init_statement_of (location_t loc, const constexpr_ctx *ctx, tree r,
 			bool *non_constant_p, tree *jump_target, tree fun)
 {
-  tree f = get_loop_statement (r, FOR_STMT);
+  tree orig = r;
+  while (orig && TREE_CODE (orig) == CLEANUP_POINT_EXPR)
+    orig = TREE_OPERAND (orig, 0);
+  tree f = get_loop_statement (orig, FOR_STMT);
   if (!f)
     return throw_exception (loc, ctx,
 			    "reflection does not represent a for statement",
 			    fun, non_constant_p, jump_target);
-  tree init = get_for_init_stmt (f);
+  tree init = FOR_INIT_STMT (f);
+  if (!init && orig != f && for_of_for_scope (orig) == f)
+    {
+      /* Extract the init statement from the sk_for BIND_EXPR's body before
+	 the trailing CLEANUP_STMT / TRY_FINALLY_EXPR.  */
+      tree body = BIND_EXPR_BODY (orig);
+      if (body && TREE_CODE (body) == STATEMENT_LIST
+	  && STATEMENT_LIST_TAIL (body))
+	{
+	  tree_stmt_iterator last = tsi_last (body);
+	  for (tree_stmt_iterator it = tsi_start (body);
+	       it.ptr != last.ptr; tsi_next (&it))
+	    {
+	      tree s = tsi_stmt (it);
+	      if (TREE_CODE (s) == DEBUG_BEGIN_STMT)
+		continue;
+	      init = s;
+	      break;
+	    }
+	  if (init
+	      && BIND_EXPR_VARS (orig)
+	      && !TREE_CHAIN (BIND_EXPR_VARS (orig))
+	      && TREE_CODE (init) == CLEANUP_POINT_EXPR)
+	    {
+	      tree inner_rec = init;
+	      while (inner_rec
+		     && TREE_CODE (inner_rec) == CLEANUP_POINT_EXPR)
+		inner_rec = TREE_OPERAND (inner_rec, 0);
+	      if (inner_rec && TREE_CODE (inner_rec) != INIT_EXPR
+		  && TREE_CODE (inner_rec) != DECL_EXPR)
+		{
+		  tree var = BIND_EXPR_VARS (orig);
+		  init = build_stmt (DECL_SOURCE_LOCATION (var),
+				     DECL_EXPR, var);
+		}
+	    }
+	}
+    }
   if (!init)
     return get_null_reflection ();
   if (TREE_CODE (init) == STATEMENT_LIST)
@@ -5402,7 +5495,7 @@ static tree
 eval_loop_body_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		   bool *non_constant_p, tree *jump_target, tree fun)
 {
-  tree stmt = unwrap_statement_wrappers (r);
+  tree stmt = get_any_loop_statement (r);
   tree body = NULL_TREE;
   if (stmt && TREE_CODE (stmt) == FOR_STMT)
     body = FOR_BODY (stmt);
@@ -5433,6 +5526,7 @@ eval_loop_body_of (location_t loc, const constexpr_ctx *ctx, tree r,
 	  body = first;
 	}
     }
+  body = unwrap_for_scope (body);
   if (!body || (TREE_CODE (body) == STATEMENT_LIST
 		&& !STATEMENT_LIST_TAIL (body)))
     {
@@ -5459,7 +5553,7 @@ eval_then_statement_of (location_t loc, const constexpr_ctx *ctx, tree r,
   tree op = (TREE_CODE (if_stmt) == IF_STMT
 	     ? THEN_CLAUSE (if_stmt)
 	     : TREE_OPERAND (if_stmt, 1));
-  op = strip_goto_prediction (op);
+  op = unwrap_for_scope (strip_goto_prediction (op));
   if (!op || IS_EMPTY_STMT (op) || op == void_node)
     return get_compound_statement_reflection_for (loc, if_stmt, NULL_TREE);
   return get_reflection_raw (loc, op, REFLECT_UNDEF);
@@ -5477,7 +5571,7 @@ eval_else_statement_of (location_t loc, const constexpr_ctx *ctx, tree r,
   tree op = (TREE_CODE (if_stmt) == IF_STMT
 	     ? ELSE_CLAUSE (if_stmt)
 	     : TREE_OPERAND (if_stmt, 2));
-  op = strip_goto_prediction (op);
+  op = unwrap_for_scope (strip_goto_prediction (op));
   if (!op || IS_EMPTY_STMT (op) || op == void_node)
     return get_null_reflection ();
   return get_reflection_raw (loc, op, REFLECT_UNDEF);
@@ -5487,10 +5581,8 @@ static tree
 eval_condition_of (location_t loc, const constexpr_ctx *ctx, tree r,
 		   bool *non_constant_p, tree *jump_target, tree fun)
 {
-  tree stmt = unwrap_statement_wrappers (r);
-  if (stmt && (TREE_CODE (stmt) == FOR_STMT
-	       || TREE_CODE (stmt) == WHILE_STMT
-	       || TREE_CODE (stmt) == DO_STMT))
+  tree stmt = get_any_loop_statement (r);
+  if (stmt)
     {
       tree cond = (TREE_CODE (stmt) == FOR_STMT ? FOR_COND (stmt)
 		   : TREE_CODE (stmt) == WHILE_STMT ? WHILE_COND (stmt)
@@ -12190,6 +12282,8 @@ compare_reflections (tree lhs, tree rhs)
   else if (lkind == REFLECT_ANNOTATION)
     return TREE_VALUE (lhs) == TREE_VALUE (rhs);
   else if (lkind == REFLECT_BASE)
+    return lhs == rhs;
+  else if (for_of_for_scope (lhs) != lhs || for_of_for_scope (rhs) != rhs)
     return lhs == rhs;
   else if (eval_is_compound_statement (lhs) == boolean_true_node
 	   && eval_is_compound_statement (rhs) == boolean_true_node)

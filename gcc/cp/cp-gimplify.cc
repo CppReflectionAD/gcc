@@ -775,8 +775,6 @@ cp_genericize_control_r (tree *stmt_p, int *walk_subtrees, void *data)
   switch (TREE_CODE (stmt))
     {
     case FOR_STMT:
-      FOR_STMT_REFLECT_INIT (stmt) = NULL_TREE;
-      /* Fall through.  */
     case WHILE_STMT:
     case DO_STMT:
     case SWITCH_STMT:

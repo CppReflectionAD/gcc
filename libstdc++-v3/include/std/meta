@@ -375,8 +375,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     // A goto statement, and a label as statements_of lists it: `L:` is an
     // element of its own, followed by the statement it labels. label_of gives
     // the label a goto jumps to, or the one a label statement defines; two
-    // reflections of the same label compare equal. A loop's lowered labels
-    // have no identifier.
+    // reflections of the same label compare equal.
     consteval bool is_goto_statement(info);
     consteval bool is_label_statement(info);
     consteval info label_of(info);

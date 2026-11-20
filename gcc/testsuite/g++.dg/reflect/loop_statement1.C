@@ -241,6 +241,83 @@ consteval bool rejects_invalid() {
 }
 static_assert(rejects_invalid());
 
+// Blocks holding a single loop, and a class-type init `for` as the only
+// statement in its block or function.
+void f_block_loops(int c, int e) {
+  { while (c) ++e; }
+  { do ++e; while (c); }
+  { for (int i = 0; i < c; ++i) ++e; }
+  { for (; c; ++e) --c; }
+  { for (S s(0); s.ok(); ++s.v) ++e; }
+}
+
+void f_for_dtor_only() {
+  for (S s(0); s.ok(); ++s.v) {}
+}
+
+constexpr info bl0 = stmt(^^f_block_loops, 0);
+static_assert(is_compound_statement(bl0));
+static_assert(!is_while_statement(bl0));
+static_assert(statements_of(bl0).size() == 1);
+static_assert(is_while_statement(statements_of(bl0)[0]));
+static_assert(!is_compound_statement(statements_of(bl0)[0]));
+
+constexpr info bl1 = stmt(^^f_block_loops, 1);
+static_assert(is_compound_statement(bl1));
+static_assert(!is_do_statement(bl1));
+static_assert(statements_of(bl1).size() == 1);
+static_assert(is_do_statement(statements_of(bl1)[0]));
+static_assert(!is_compound_statement(statements_of(bl1)[0]));
+
+constexpr info bl2 = stmt(^^f_block_loops, 2);
+static_assert(is_compound_statement(bl2));
+static_assert(!is_for_statement(bl2));
+static_assert(statements_of(bl2).size() == 1);
+static_assert(is_for_statement(statements_of(bl2)[0]));
+static_assert(!is_compound_statement(statements_of(bl2)[0]));
+
+constexpr info bl3 = stmt(^^f_block_loops, 3);
+static_assert(is_compound_statement(bl3));
+static_assert(!is_for_statement(bl3));
+static_assert(statements_of(bl3).size() == 1);
+static_assert(is_for_statement(statements_of(bl3)[0]));
+static_assert(!is_compound_statement(statements_of(bl3)[0]));
+static_assert(init_statement_of(statements_of(bl3)[0]) == info{});
+
+constexpr info bl4 = stmt(^^f_block_loops, 4);
+static_assert(is_compound_statement(bl4));
+static_assert(!is_for_statement(bl4));
+static_assert(statements_of(bl4).size() == 1);
+static_assert(is_for_statement(statements_of(bl4)[0]));
+static_assert(is_declaration_statement(init_statement_of(statements_of(bl4)[0])));
+
+static_assert(is_compound_statement(body_of(^^f_for_dtor_only)));
+static_assert(!is_for_statement(body_of(^^f_for_dtor_only)));
+static_assert(statements_of(body_of(^^f_for_dtor_only)).size() == 1);
+static_assert(is_for_statement(stmt(^^f_for_dtor_only, 0)));
+static_assert(is_declaration_statement(init_statement_of(stmt(^^f_for_dtor_only, 0))));
+
+__attribute__((noipa)) int do_continue(int s, int x) {
+  switch (s) {
+  case 0:
+    do { if (x) continue; return 1; } while (0);
+    break;
+  case 1:
+    return 2;
+  }
+  return 3;
+}
+
+__attribute__((noipa)) int loop_continue(int x) {
+  int n = 0;
+  for (int i = 0; i < 3; ++i) {
+    ++n;
+    do { if (x) continue; return 100; } while (0);
+    break;
+  }
+  return n;
+}
+
 int main() {
   assert(f_for_compound(0) == 2);
   assert(f_for_single(0) == 5);
@@ -250,5 +327,8 @@ int main() {
   assert(f_do(0) == 10);
   assert(f_tmpl(0) == 12);
   assert(f_if(-5) == 5);
+  assert(do_continue(0, 1) == 3);
+  assert(do_continue(0, 0) == 1);
+  assert(loop_continue(1) == 1);
   return 0;
 }
