@@ -66,5 +66,5 @@ kinds (info fn)
   return r * 16 + int (statements_of (body_of (fn)).size ());
 }
 
-static_assert (kinds (^^f_for) == 0x1483);
+static_assert (kinds (^^f_for) == 0x1083);
 static_assert (kinds (^^f_if) == 0x482);

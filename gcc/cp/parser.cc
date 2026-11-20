@@ -16635,6 +16635,9 @@ cp_parser_iteration_statement (cp_parser* parser, bool *if_p, bool ivdep,
 	/* Look for the `)'.  */
 	parens.require_close (parser);
 	/* Parse the dependent statement.  */
+	if (TREE_CODE (statement) == WHILE_STMT
+	    && cp_lexer_next_token_is (parser->lexer, CPP_OPEN_BRACE))
+	  LOOP_BODY_COMPOUND_P (statement) = 1;
 	parser->in_statement = IN_ITERATION_STMT;
 	bool prev = note_iteration_stmt_body_start ();
 	cp_parser_already_scoped_statement (parser, if_p, guard_tinfo);
@@ -16652,6 +16655,9 @@ cp_parser_iteration_statement (cp_parser* parser, bool *if_p, bool ivdep,
 	/* Begin the do-statement.  */
 	statement = begin_do_stmt ();
 	/* Parse the body of the do-statement.  */
+	if (TREE_CODE (statement) == DO_STMT
+	    && cp_lexer_next_token_is (parser->lexer, CPP_OPEN_BRACE))
+	  LOOP_BODY_COMPOUND_P (statement) = 1;
 	parser->in_statement = IN_ITERATION_STMT;
 	bool prev = note_iteration_stmt_body_start ();
 	cp_parser_implicitly_scoped_statement (parser, NULL, guard_tinfo);
@@ -16686,6 +16692,9 @@ cp_parser_iteration_statement (cp_parser* parser, bool *if_p, bool ivdep,
 	parens.require_close (parser);
 
 	/* Parse the body of the for-statement.  */
+	if (TREE_CODE (statement) == FOR_STMT
+	    && cp_lexer_next_token_is (parser->lexer, CPP_OPEN_BRACE))
+	  LOOP_BODY_COMPOUND_P (statement) = 1;
 	parser->in_statement = IN_ITERATION_STMT;
 	bool prev = note_iteration_stmt_body_start ();
 	cp_parser_already_scoped_statement (parser, if_p, guard_tinfo);
@@ -17208,11 +17217,18 @@ cp_parser_implicitly_scoped_statement (cp_parser* parser, bool *if_p,
   if (if_p != NULL)
     *if_p = false;
 
-  /* Mark if () ; with a special NOP_EXPR.  */
+  /* Mark if () ; with a special NOP_EXPR, or a null statement marker under
+     -freflection so then_statement_of / else_statement_of see `;'.  */
   if (cp_lexer_next_token_is (parser->lexer, CPP_SEMICOLON))
     {
       cp_lexer_consume_token (parser->lexer);
-      statement = add_stmt (build_empty_stmt (body_loc));
+      if (flag_reflection
+	  && at_function_scope_p ()
+	  && (guard_tinfo.keyword == RID_IF
+	      || guard_tinfo.keyword == RID_ELSE))
+	statement = add_stmt (reflection_null_statement_marker (body_loc));
+      else
+	statement = add_stmt (build_empty_stmt (body_loc));
 
       if (guard_tinfo.keyword == RID_IF
 	  && !cp_lexer_next_token_is_keyword (parser->lexer, RID_ELSE))

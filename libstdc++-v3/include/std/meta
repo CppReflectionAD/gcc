@@ -352,6 +352,34 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     consteval info true_expression_of(info);
     consteval info false_expression_of(info);
 
+    // An if statement. condition_of, true_expression_of and
+    // false_expression_of accept one too, giving its condition and branches.
+    // then_statement_of and else_statement_of give the branches (returning
+    // a null reflection when there is no else).  Note that for commuted
+    // pointer addition (`i + p`) and subscripting (`i[a]`), operands_of
+    // reports the pointer/array first and the index second.
+    consteval bool is_if_statement(info);
+    consteval info then_statement_of(info);
+    consteval info else_statement_of(info);
+
+    // Loop and loop-control statements.
+    consteval bool is_for_statement(info);
+    consteval bool is_while_statement(info);
+    consteval bool is_do_statement(info);
+    consteval bool is_break_statement(info);
+    consteval bool is_continue_statement(info);
+    consteval info init_statement_of(info);
+    consteval info increment_of(info);
+    consteval info loop_body_of(info);
+
+    // A goto statement, and a label as statements_of lists it: `L:` is an
+    // element of its own, followed by the statement it labels. label_of gives
+    // the label a goto jumps to, or the one a label statement defines; two
+    // reflections of the same label compare equal.
+    consteval bool is_goto_statement(info);
+    consteval bool is_label_statement(info);
+    consteval info label_of(info);
+
     template<typename _Container>
     consteval auto define_static_array(_Container&& __c) {
       return __c;

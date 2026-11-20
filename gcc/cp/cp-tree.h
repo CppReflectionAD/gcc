@@ -460,6 +460,7 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       OLD_PARM_DECL_P (in PARM_DECL)
       COMPONENT_REF_SPLICE_P (in COMPONENT_REF)
       TYPE_DECL_OPAQUE_ALIAS_P (in TYPE_DECL)
+      POINTER_PLUS_SUBTRACT_P (in POINTER_PLUS_EXPR)
    1: IDENTIFIER_KIND_BIT_1 (in IDENTIFIER_NODE)
       TI_PENDING_TEMPLATE_FLAG.
       TEMPLATE_PARMS_FOR_INLINE.
@@ -543,6 +544,7 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       SPLICE_EXPR_TARGS_P (in SPLICE_EXPR)
       modify_expr_compound_code (in MODIFY_EXPR)
       IF_STMT_REFLECTION_KEPT_P (in IF_STMT)
+      LOOP_BODY_COMPOUND_P (in FOR_STMT, WHILE_STMT, DO_STMT)
    5: IDENTIFIER_VIRTUAL_P (in IDENTIFIER_NODE)
       FUNCTION_RVALUE_QUALIFIED (in FUNCTION_TYPE, METHOD_TYPE)
       BIND_EXPR_REFLECT_BODY (in BIND_EXPR)
@@ -552,8 +554,10 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       DECL_NTTP_OBJECT_P (in VAR_DECL)
    6: TYPE_MARKED_P (in _TYPE)
       DECL_NONTRIVIALLY_INITIALIZED_P (in VAR_DECL)
+      BIND_EXPR_REFLECT_FOR_SCOPE (in BIND_EXPR)
       RANGE_FOR_IVDEP (in RANGE_FOR_STMT)
       CALL_EXPR_OPERATOR_SYNTAX (in CALL_EXPR, AGGR_INIT_EXPR)
+      INDIRECT_REF_SUBSCRIPT_P (in INDIRECT_REF)
       CONSTRUCTOR_IS_DESIGNATED_INIT (in CONSTRUCTOR)
       OVL_NAME_INDEPENDENT_DECL_P (in OVERLOAD)
 
@@ -804,6 +808,11 @@ typedef struct ptrmem_cst * ptrmem_cst_t;
    its BIND_EXPR, and do_poplevel gives it a BIND_EXPR, marked too.  */
 #define BIND_EXPR_REFLECT_BLOCK(NODE) \
   TREE_LANG_FLAG_4 (BIND_EXPR_CHECK (NODE))
+/* Under -freflection, the scope of a `for' whose init-statement declares a
+   variable with a cleanup.  std::meta::statements_of reports it as the `for'
+   statement itself, and init_statement_of extracts the init from its body.  */
+#define BIND_EXPR_REFLECT_FOR_SCOPE(NODE) \
+  TREE_LANG_FLAG_6 (BIND_EXPR_CHECK (NODE))
 #define STATEMENT_LIST_REFLECT_BLOCK(NODE) \
   TREE_LANG_FLAG_4 (STATEMENT_LIST_CHECK (NODE))
 
@@ -4567,6 +4576,18 @@ struct GTY(()) lang_decl {
 #define CALL_EXPR_OPERATOR_SYNTAX(NODE) \
   TREE_LANG_FLAG_6 (CALL_OR_AGGR_INIT_CHECK (NODE))
 
+/* True if the INDIRECT_REF NODE is a subscript of a pointer, `p[i]', which
+   cp_build_array_ref builds as `*(p + i)'.  Set only under -freflection,
+   so that reflection reports the subscript as written.  */
+#define INDIRECT_REF_SUBSCRIPT_P(NODE) \
+  TREE_LANG_FLAG_6 (INDIRECT_REF_CHECK (NODE))
+
+/* True if the POINTER_PLUS_EXPR NODE was built from `p - i' (MINUS_EXPR),
+   with a negated offset.  Set only under -freflection so pointer arithmetic
+   reflection does not mistake it for `p + (-i)`.  */
+#define POINTER_PLUS_SUBTRACT_P(NODE) \
+  TREE_LANG_FLAG_0 (POINTER_PLUS_EXPR_CHECK (NODE))
+
 /* A TREE_LIST containing the result of phase 1 name lookup of the operator
    overloads that are pertinent to the dependent operator expression whose
    type is NODE.  Each TREE_PURPOSE is an IDENTIFIER_NODE and TREE_VALUE is
@@ -5993,6 +6014,10 @@ decl_template_parm_check (const_tree t, const char *f, int l, const char *fn)
    cp_gimplify_expr makes that replacement.  */
 #define IF_STMT_REFLECTION_KEPT_P(NODE) \
   TREE_LANG_FLAG_4 (IF_STMT_CHECK (NODE))
+/* True on FOR_STMT, WHILE_STMT, or DO_STMT whose body was parsed as a
+   compound statement (brace-enclosed).  */
+#define LOOP_BODY_COMPOUND_P(NODE) \
+  TREE_LANG_FLAG_4 (TREE_CHECK3 (NODE, FOR_STMT, WHILE_STMT, DO_STMT))
 
 /* Like PACK_EXPANSION_EXTRA_ARGS, for constexpr if.  IF_SCOPE is used while
    building an IF_STMT; IF_STMT_EXTRA_ARGS is used after it is complete.  */
