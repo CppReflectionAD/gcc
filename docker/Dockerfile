@@ -38,6 +38,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       tar \
       texinfo \
       xz-utils \
+      z3 \
       zlib1g \
       zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
