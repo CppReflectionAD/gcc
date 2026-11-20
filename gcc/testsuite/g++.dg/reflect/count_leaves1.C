@@ -40,7 +40,7 @@ consteval bool run_test() {
     return false;
 
   int while_leaves = count_leaves(body_of( ^^test_while ));
-  if (while_leaves != 11)
+  if (while_leaves != 5)
     return false;
 
   return true;

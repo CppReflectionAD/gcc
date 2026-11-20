@@ -460,6 +460,76 @@ has_c_linkage (const_tree decl)
   return DECL_EXTERN_C_P (decl);
 }
 
+/* Helper for cxx_block_may_fallthru: return non-NULL if *TP is a BREAK_STMT,
+   CONTINUE_STMT (when COUNT_CONTINUE is set, for a do-while with a false
+   condition), or GOTO_EXPR that could exit the enclosing loop (skipping
+   nested loops for BREAK_STMT and CONTINUE_STMT, and nested switches for
+   BREAK_STMT).  */
+
+struct loop_exit_walk_data
+{
+  bool in_nested_loop;
+  bool in_nested_switch;
+  bool count_continue;
+};
+
+static tree
+loop_body_may_exit_r (tree *tp, int *walk_subtrees, void *data)
+{
+  tree t = *tp;
+  loop_exit_walk_data *wd = static_cast<loop_exit_walk_data *> (data);
+  switch (TREE_CODE (t))
+    {
+    case BREAK_STMT:
+      return (wd->in_nested_loop || wd->in_nested_switch) ? NULL_TREE : t;
+    case CONTINUE_STMT:
+      return (!wd->count_continue || wd->in_nested_loop) ? NULL_TREE : t;
+    case GOTO_EXPR:
+      return t;
+    case FOR_STMT:
+    case WHILE_STMT:
+    case DO_STMT:
+      if (!wd->in_nested_loop)
+	{
+	  loop_exit_walk_data nested = *wd;
+	  nested.in_nested_loop = true;
+	  for (int i = 0; i < TREE_OPERAND_LENGTH (t); ++i)
+	    if (tree op = TREE_OPERAND (t, i))
+	      if (cp_walk_tree_without_duplicates (&op, loop_body_may_exit_r,
+						   &nested))
+		return t;
+	  *walk_subtrees = 0;
+	}
+      return NULL_TREE;
+    case SWITCH_STMT:
+      if (!wd->in_nested_switch)
+	{
+	  loop_exit_walk_data nested = *wd;
+	  nested.in_nested_switch = true;
+	  for (int i = 0; i < TREE_OPERAND_LENGTH (t); ++i)
+	    if (tree op = TREE_OPERAND (t, i))
+	      if (cp_walk_tree_without_duplicates (&op, loop_body_may_exit_r,
+						   &nested))
+		return t;
+	  *walk_subtrees = 0;
+	}
+      return NULL_TREE;
+    default:
+      if (IS_TYPE_OR_DECL_P (t))
+	*walk_subtrees = 0;
+      return NULL_TREE;
+    }
+}
+
+static bool
+loop_body_may_exit_p (const_tree body, bool count_continue = false)
+{
+  tree t = const_cast<tree> (body);
+  loop_exit_walk_data wd = { false, false, count_continue };
+  return cp_walk_tree_without_duplicates (&t, loop_body_may_exit_r,
+					  &wd) != NULL_TREE;
+}
+
 /* Return true if stmt can fall through.  Used by block_may_fallthru
    default case.  */
 
@@ -487,6 +557,40 @@ cxx_block_may_fallthru (const_tree stmt)
       if (block_may_fallthru (THEN_CLAUSE (stmt)))
 	return true;
       return block_may_fallthru (ELSE_CLAUSE (stmt));
+
+    case FOR_STMT:
+      if (flag_reflection)
+	{
+	  const_tree cond = FOR_COND (stmt);
+	  if ((!cond || integer_nonzerop (cond))
+	      && !loop_body_may_exit_p (FOR_BODY (stmt)))
+	    return false;
+	}
+      return true;
+
+    case WHILE_STMT:
+      if (flag_reflection)
+	{
+	  const_tree cond = WHILE_COND (stmt);
+	  if (cond && integer_nonzerop (cond)
+	      && !loop_body_may_exit_p (WHILE_BODY (stmt)))
+	    return false;
+	}
+      return true;
+
+    case DO_STMT:
+      if (flag_reflection)
+	{
+	  const_tree cond = DO_COND (stmt);
+	  if (cond && integer_nonzerop (cond)
+	      && !loop_body_may_exit_p (DO_BODY (stmt)))
+	    return false;
+	  if (cond && integer_zerop (cond)
+	      && !loop_body_may_exit_p (DO_BODY (stmt), /*count_continue=*/true)
+	      && !block_may_fallthru (DO_BODY (stmt)))
+	    return false;
+	}
+      return true;
 
     case CLEANUP_STMT:
       /* Just handle the try/finally cases.  */
