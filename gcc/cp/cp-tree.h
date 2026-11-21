@@ -489,6 +489,7 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       modify_expr_compound_code (in MODIFY_EXPR)
    2: IDENTIFIER_KIND_BIT_2 (in IDENTIFIER_NODE)
       ICS_THIS_FLAG (in _CONV)
+      BIND_EXPR_REFLECT_IF_SCOPE (in BIND_EXPR)
       DECL_INITIALIZED_BY_CONSTANT_EXPRESSION_P (in VAR_DECL)
       STATEMENT_LIST_TRY_BLOCK (in STATEMENT_LIST)
       TYPENAME_TYPE_TAG_BIT_2 (in TYPENAME_TYPE)
@@ -791,6 +792,11 @@ typedef struct ptrmem_cst * ptrmem_cst_t;
 /* Used to mark the block around the member initializers and cleanups.  */
 #define BIND_EXPR_BODY_BLOCK(NODE) \
   TREE_LANG_FLAG_3 (BIND_EXPR_CHECK (NODE))
+/* Under -freflection, the scope of an `if' whose condition or init-statement
+   declares a variable, or that holds a block that does: the declarations,
+   then the `if'.  std::meta::statements_of reports it as the `if' itself.  */
+#define BIND_EXPR_REFLECT_IF_SCOPE(NODE) \
+  TREE_LANG_FLAG_2 (BIND_EXPR_CHECK (NODE))
 /* This BIND_EXPR is from body_of, for a function body that isn't a block.  */
 #define BIND_EXPR_REFLECT_BODY(NODE) \
   TREE_LANG_FLAG_5 (BIND_EXPR_CHECK (NODE))
