@@ -489,6 +489,7 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       modify_expr_compound_code (in MODIFY_EXPR)
    2: IDENTIFIER_KIND_BIT_2 (in IDENTIFIER_NODE)
       ICS_THIS_FLAG (in _CONV)
+      BIND_EXPR_REFLECT_IF_SCOPE (in BIND_EXPR)
       DECL_INITIALIZED_BY_CONSTANT_EXPRESSION_P (in VAR_DECL)
       STATEMENT_LIST_TRY_BLOCK (in STATEMENT_LIST)
       TYPENAME_TYPE_TAG_BIT_2 (in TYPENAME_TYPE)
@@ -545,6 +546,7 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       modify_expr_compound_code (in MODIFY_EXPR)
       IF_STMT_REFLECTION_KEPT_P (in IF_STMT)
       LOOP_BODY_COMPOUND_P (in FOR_STMT, WHILE_STMT, DO_STMT)
+      COND_EXPR_REFLECTION_NO_ELSE_P (in COND_EXPR)
    5: IDENTIFIER_VIRTUAL_P (in IDENTIFIER_NODE)
       FUNCTION_RVALUE_QUALIFIED (in FUNCTION_TYPE, METHOD_TYPE)
       BIND_EXPR_REFLECT_BODY (in BIND_EXPR)
@@ -790,6 +792,11 @@ typedef struct ptrmem_cst * ptrmem_cst_t;
 /* Used to mark the block around the member initializers and cleanups.  */
 #define BIND_EXPR_BODY_BLOCK(NODE) \
   TREE_LANG_FLAG_3 (BIND_EXPR_CHECK (NODE))
+/* Under -freflection, the scope of an `if' whose condition or init-statement
+   declares a variable, or that holds a block that does: the declarations,
+   then the `if'.  std::meta::statements_of reports it as the `if' itself.  */
+#define BIND_EXPR_REFLECT_IF_SCOPE(NODE) \
+  TREE_LANG_FLAG_2 (BIND_EXPR_CHECK (NODE))
 /* This BIND_EXPR is from body_of, for a function body that isn't a block.  */
 #define BIND_EXPR_REFLECT_BODY(NODE) \
   TREE_LANG_FLAG_5 (BIND_EXPR_CHECK (NODE))
@@ -834,6 +841,13 @@ typedef struct ptrmem_cst * ptrmem_cst_t;
 
 #define COND_EXPR_IS_VEC_DELETE(NODE) \
   TREE_LANG_FLAG_0 (COND_EXPR_CHECK (NODE))
+
+/* True on the COND_EXPR that genericize_if_stmt makes of an if with no else
+   under -freflection.  Its else arm is the empty statement genericize_if_stmt
+   adds for the gimplifier, which std::meta::statements_of and
+   false_expression_of leave out, since the if has no else part.  */
+#define COND_EXPR_REFLECTION_NO_ELSE_P(NODE) \
+  TREE_LANG_FLAG_4 (COND_EXPR_CHECK (NODE))
 
 /* Nonzero if this NOP_EXPR is a reinterpret_cast.  Such conversions
    are not constexprs.  Other NOP_EXPRs are.  */
