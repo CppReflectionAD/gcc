@@ -47,6 +47,21 @@ g (T x)
   return x;
 }
 
+int
+scoped (int x)
+{
+  if (int y = sink (x))
+    sink (y);
+  if (int y = sink (x); y > 1)
+    sink (y);
+  if (x)
+    {
+      int y = x;
+      sink (y);
+    }
+  return 0;
+}
+
 consteval info
 st (info fn, int k)
 {
@@ -82,6 +97,14 @@ static_assert (line (statements_of (st (^^f, 8))[0]) == 29);
 // In an instantiation of a template.
 static_assert (line (st (^^g<int>, 0)) == 46);
 static_assert (line (st (^^g<int>, 1)) == 47);
+
+// An `if' that declares a variable, in its init-statement, its condition or a
+// block, is in a scope of its own, which starts where the `if' does.
+static_assert (line (st (^^scoped, 0)) == 53);
+static_assert (line (st (^^scoped, 1)) == 55);
+static_assert (line (st (^^scoped, 2)) == 57);
+static_assert (line (statements_of (st (^^scoped, 0))[0]) == 53);
+static_assert (line (statements_of (st (^^scoped, 1))[0]) == 55);
 
 // Stored in a constexpr variable or a class member.
 constexpr info stored = st (^^f, 1);
