@@ -16165,7 +16165,12 @@ static tree
 prune_expr_location (tree *tp, int *walk_subtrees, void *)
 {
   if (EXPR_P (*tp))
-    SET_EXPR_LOCATION (*tp, UNKNOWN_LOCATION);
+    {
+      SET_EXPR_LOCATION (*tp, UNKNOWN_LOCATION);
+      /* unshare_expr didn't copy its operands, so leave them alone.  */
+      if (lang_hooks.tree_inlining.shared_operands_p (*tp))
+	*walk_subtrees = 0;
+    }
   else
     *walk_subtrees = 0;
   return NULL_TREE;

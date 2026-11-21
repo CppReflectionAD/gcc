@@ -139,6 +139,8 @@ static const scoped_attribute_specs *const cp_objcp_attribute_table[] =
 
 #undef LANG_HOOKS_TREE_INLINING_VAR_MOD_TYPE_P
 #define LANG_HOOKS_TREE_INLINING_VAR_MOD_TYPE_P cp_var_mod_type_p
+#undef LANG_HOOKS_TREE_INLINING_SHARED_OPERANDS_P
+#define LANG_HOOKS_TREE_INLINING_SHARED_OPERANDS_P cp_shared_operands_p
 #undef LANG_HOOKS_TREE_DUMP_DUMP_TREE_FN
 #define LANG_HOOKS_TREE_DUMP_DUMP_TREE_FN cp_dump_tree
 #undef LANG_HOOKS_TREE_DUMP_TYPE_QUALS_FN
