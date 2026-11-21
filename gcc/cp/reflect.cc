@@ -2816,18 +2816,18 @@ eval_type_of (location_t loc, const constexpr_ctx *ctx, tree r,
 }
 
 static tree eval_is_statement (tree);
-static tree if_of_if_scope (tree);
+static tree selection_of_scope (tree);
 
 /* The location where the statement S starts, or UNKNOWN_LOCATION.  Look
    through the trees that wrap an expression statement, which may have no
-   location of their own, and through the scope of an `if', which starts
-   where the `if' does.  A block has none: GCC keeps only the location of
-   its closing brace, in its BIND_EXPR.  */
+   location of their own, and through the scope of an `if' or `switch',
+   which starts where the `if' or `switch' does.  A block has none: GCC
+   keeps only the location of its closing brace, in its BIND_EXPR.  */
 
 static location_t
 statement_location (tree s)
 {
-  s = if_of_if_scope (s);
+  s = selection_of_scope (s);
   if (TREE_CODE (s) == STATEMENT_LIST || TREE_CODE (s) == BIND_EXPR)
     return UNKNOWN_LOCATION;
   while (!EXPR_HAS_LOCATION (s)

@@ -59,6 +59,10 @@ scoped (int x)
       int y = x;
       sink (y);
     }
+  switch (int y = sink (x))
+    default: sink (y);
+  switch (int y = x; y)
+    default: sink (y);
   return 0;
 }
 
@@ -98,11 +102,14 @@ static_assert (line (statements_of (st (^^f, 8))[0]) == 29);
 static_assert (line (st (^^g<int>, 0)) == 46);
 static_assert (line (st (^^g<int>, 1)) == 47);
 
-// An `if' that declares a variable, in its init-statement, its condition or a
-// block, is in a scope of its own, which starts where the `if' does.
+// An `if' or `switch' that declares a variable, in its init-statement, its
+// condition or a block, is in a scope of its own, which starts where the `if'
+// or `switch' does.
 static_assert (line (st (^^scoped, 0)) == 53);
 static_assert (line (st (^^scoped, 1)) == 55);
 static_assert (line (st (^^scoped, 2)) == 57);
+static_assert (line (st (^^scoped, 3)) == 62);
+static_assert (line (st (^^scoped, 4)) == 64);
 static_assert (line (statements_of (st (^^scoped, 0))[0]) == 53);
 static_assert (line (statements_of (st (^^scoped, 1))[0]) == 55);
 
