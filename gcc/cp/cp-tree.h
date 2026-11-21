@@ -803,10 +803,11 @@ typedef struct ptrmem_cst * ptrmem_cst_t;
 #define STATEMENT_LIST_TRY_BLOCK(NODE) \
   TREE_LANG_FLAG_2 (STATEMENT_LIST_CHECK (NODE))
 
-/* Under -freflection, a block that is a statement of a block is kept as a
-   compound statement even if it declares nothing, so that statements_of
-   gives it.  begin_compound_stmt marks its statement list, or in a template
-   its BIND_EXPR, and do_poplevel gives it a BIND_EXPR, marked too.  */
+/* Under -freflection, a block that is a statement of a block, or the then
+   or else statement of an if, is kept as a compound statement even if it
+   declares nothing, so that statements_of gives it.  begin_compound_stmt
+   marks its statement list, or in a template its BIND_EXPR, and do_poplevel
+   gives it a BIND_EXPR, marked too.  */
 #define BIND_EXPR_REFLECT_BLOCK(NODE) \
   TREE_LANG_FLAG_4 (BIND_EXPR_CHECK (NODE))
 /* Under -freflection, the scope of a `for' whose init-statement declares a
