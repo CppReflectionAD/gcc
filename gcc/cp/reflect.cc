@@ -4246,7 +4246,9 @@ eval_statements_of (location_t loc, const constexpr_ctx *ctx, tree r,
 	  if (TREE_OPERAND (r, 1))
 	    CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
 				    get_reflection_raw (loc, TREE_OPERAND (r, 1), REFLECT_UNDEF));
-	  if (TREE_OPERAND (r, 2))
+	  /* An if with no else has no else part, only the empty statement
+	     genericize_if_stmt adds for the gimplifier.  */
+	  if (TREE_OPERAND (r, 2) && !COND_EXPR_REFLECTION_NO_ELSE_P (r))
 	    CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
 				    get_reflection_raw (loc, TREE_OPERAND (r, 2), REFLECT_UNDEF));
 	}
@@ -5317,6 +5319,10 @@ eval_conditional_operand (location_t loc, const constexpr_ctx *ctx, tree r,
 				"expression or an if statement", fun,
 				non_constant_p, jump_target);
       op = TREE_OPERAND (cond, opno);
+      /* An if with no else has no else part, though its COND_EXPR has an
+	 arm.  */
+      if (opno == 2 && COND_EXPR_REFLECTION_NO_ELSE_P (cond))
+	op = NULL_TREE;
     }
 
   /* In the GNU `c ?: b` extension the condition doubles as the true branch,
