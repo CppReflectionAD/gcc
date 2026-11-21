@@ -201,8 +201,10 @@ static_assert(is_compound_statement(loop_body_of(t_do)));
 // if then/else statements
 constexpr info if1 = stmt(^^f_if, 0);
 static_assert(is_if_statement(if1));
-static_assert(is_return_statement(then_statement_of(if1)));
-static_assert(is_return_statement(else_statement_of(if1)));
+static_assert(is_compound_statement(then_statement_of(if1)));
+static_assert(is_return_statement(statements_of(then_statement_of(if1))[0]));
+static_assert(is_compound_statement(else_statement_of(if1)));
+static_assert(is_return_statement(statements_of(else_statement_of(if1))[0]));
 static_assert(then_statement_of(if1) == then_statement_of(if1));
 static_assert(else_statement_of(if1) == else_statement_of(if1));
 

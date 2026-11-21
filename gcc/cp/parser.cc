@@ -17240,7 +17240,19 @@ cp_parser_implicitly_scoped_statement (cp_parser* parser, bool *if_p,
     }
   /* if a compound is opened, we simply parse the statement directly.  */
   else if (cp_lexer_next_token_is (parser->lexer, CPP_OPEN_BRACE))
-    statement = cp_parser_compound_statement (parser, NULL, BCS_NORMAL, false);
+    {
+      /* Under -freflection, a block that is the then or else statement of
+	 an if is a statement of the if even if it declares nothing, as a
+	 block in a block is.  */
+      int bcs_flags = BCS_NORMAL;
+      if (flag_reflection
+	  && (guard_tinfo.keyword == RID_IF
+	      || guard_tinfo.keyword == RID_ELSE)
+	  && at_function_scope_p ())
+	bcs_flags |= BCS_REFLECT_BLOCK;
+      statement = cp_parser_compound_statement (parser, NULL, bcs_flags,
+						false);
+    }
   /* If the token is not a `{', then we must take special action.  */
   else
     {
