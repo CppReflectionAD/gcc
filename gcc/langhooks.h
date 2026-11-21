@@ -42,6 +42,11 @@ class substring_loc;
 struct lang_hooks_for_tree_inlining
 {
   bool (*var_mod_type_p) (tree, tree);
+
+  /* True if copying the expression T must not copy its operands, nor walk
+     into them, because the value of T is which tree they are, such as the
+     statement a reflection of a statement reflects.  */
+  bool (*shared_operands_p) (const_tree t);
 };
 
 /* The following hooks are used by tree-dump.cc.  */

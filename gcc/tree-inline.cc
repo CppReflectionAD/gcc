@@ -5769,6 +5769,10 @@ copy_tree_r (tree *tp, int *walk_subtrees, void *data ATTRIBUTE_UNUSED)
 	 have to nullify all BIND_EXPRs.  */
       if (TREE_CODE (*tp) == BIND_EXPR)
 	BIND_EXPR_BLOCK (*tp) = NULL_TREE;
+
+      /* The copy refers to the same operands as the original.  */
+      if (lang_hooks.tree_inlining.shared_operands_p (*tp))
+	*walk_subtrees = 0;
     }
   else if (code == CONSTRUCTOR)
     {
