@@ -3420,12 +3420,16 @@ bot_manip (tree* tp, int* walk_subtrees, void* data_)
    variables.  */
 
 static tree
-bot_replace (tree* t, int */*walk_subtrees*/, void* data_)
+bot_replace (tree* t, int *walk_subtrees, void* data_)
 {
   bot_data &data = *(bot_data*)data_;
   splay_tree target_remap = data.target_remap;
 
-  if (VAR_P (*t))
+  /* bot_manip didn't copy the operands of such a tree, so don't change
+     them.  */
+  if (cp_shared_operands_p (*t))
+    *walk_subtrees = 0;
+  else if (VAR_P (*t))
     {
       splay_tree_node n = splay_tree_lookup (target_remap,
 					     (splay_tree_key) *t);
