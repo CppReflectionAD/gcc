@@ -2815,6 +2815,32 @@ eval_type_of (location_t loc, const constexpr_ctx *ctx, tree r,
   return get_reflection_raw (loc, type_of (r, kind));
 }
 
+static tree eval_is_statement (tree);
+
+/* The location where the statement S starts, or UNKNOWN_LOCATION.  Look
+   through the trees that wrap an expression statement, which may have no
+   location of their own.  A block has none: GCC keeps only the location
+   of its closing brace, in its BIND_EXPR.  */
+
+static location_t
+statement_location (tree s)
+{
+  if (TREE_CODE (s) == STATEMENT_LIST || TREE_CODE (s) == BIND_EXPR)
+    return UNKNOWN_LOCATION;
+  while (!EXPR_HAS_LOCATION (s)
+	 && (TREE_CODE (s) == CLEANUP_POINT_EXPR
+	     || TREE_CODE (s) == EXPR_STMT
+	     || (CONVERT_EXPR_P (s) && VOID_TYPE_P (TREE_TYPE (s)))))
+    s = TREE_OPERAND (s, 0);
+  if (EXPR_HAS_LOCATION (s))
+    return get_start (EXPR_LOCATION (s));
+  /* A null statement, or a declaration statement, whose DECL_EXPR has no
+     location.  */
+  if (TREE_CODE (s) == DECL_EXPR)
+    return DECL_SOURCE_LOCATION (DECL_EXPR_DECL (s));
+  return UNKNOWN_LOCATION;
+}
+
 /* Process std::meta::source_location_of.
    Returns: If r represents a value, a type other than a class type or an
    enumeration type, the global namespace, or a data member description,
@@ -2844,6 +2870,8 @@ eval_source_location_of (location_t loc, tree r, reflect_kind kind,
     rloc = DECL_SOURCE_LOCATION (r);
   else if (eval_is_annotation (r, kind) == boolean_true_node)
     rloc = EXPR_LOCATION (TREE_VALUE (TREE_VALUE (r)));
+  else if (eval_is_statement (r) == boolean_true_node)
+    rloc = statement_location (r);
   tree decl = NULL_TREE, field = NULL_TREE;
   if (rloc != UNKNOWN_LOCATION)
     {
