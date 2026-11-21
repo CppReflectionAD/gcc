@@ -9652,6 +9652,7 @@ extern tree reflection_declaration_marker (location_t);
 extern bool reflection_declaration_marker_p (tree);
 extern tree reflection_null_statement_marker (location_t);
 extern bool reflection_null_statement_marker_p (tree);
+extern bool cp_shared_operands_p (const_tree);
 
 /* Inline bodies.  */
 

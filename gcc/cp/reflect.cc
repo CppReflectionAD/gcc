@@ -4425,6 +4425,21 @@ eval_is_statement (tree r)
     }
 }
 
+/* Implement LANG_HOOKS_TREE_INLINING_SHARED_OPERANDS_P: a reflection of a
+   statement is equal only to a reflection of the same statement, which
+   compare_reflections tells by the address of some of the trees, so a copy
+   of the reflection must not copy the statement.  A constexpr variable
+   holds an unshared copy of its value, as do a call's arguments and a
+   default argument, and the copy of an `if' would be a different `if'.  */
+
+bool
+cp_shared_operands_p (const_tree t)
+{
+  return (REFLECT_EXPR_P (t)
+	  && (eval_is_statement (REFLECT_EXPR_HANDLE (const_cast<tree> (t)))
+	      == boolean_true_node));
+}
+
 static tree
 eval_is_compound_statement (tree r)
 {
