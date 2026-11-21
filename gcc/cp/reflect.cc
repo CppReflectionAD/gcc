@@ -12283,6 +12283,13 @@ compare_reflections (tree lhs, tree rhs)
     return TREE_VALUE (lhs) == TREE_VALUE (rhs);
   else if (lkind == REFLECT_BASE)
     return lhs == rhs;
+  else if (null_statement_p (lhs) || null_statement_p (rhs))
+    /* A null statement is a statement, which is equal only to itself, and
+       its marker says which it is: a constexpr variable can hold a copy of
+       its DECL_EXPR, but not of the marker.  cp_tree_equal can't compare
+       two different markers.  */
+    return (null_statement_p (lhs) && null_statement_p (rhs)
+	    && DECL_EXPR_DECL (lhs) == DECL_EXPR_DECL (rhs));
   else if (for_of_for_scope (lhs) != lhs || for_of_for_scope (rhs) != rhs)
     return lhs == rhs;
   else if (eval_is_compound_statement (lhs) == boolean_true_node
