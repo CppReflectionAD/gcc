@@ -187,6 +187,36 @@ first_stmt (tree stmt)
     }
 }
 
+/* True if T has side effects other than through what -freflection adds to
+   the tree and isn't there without it: the markers of null statements, and
+   the BIND_EXPRs of blocks that declare nothing, which are built with
+   TREE_SIDE_EFFECTS set so that they stay in their statement lists.  */
+
+static bool
+side_effects_without_reflection_p (tree t)
+{
+  if (t == NULL_TREE)
+    return false;
+  if (!flag_reflection)
+    return TREE_SIDE_EFFECTS (t);
+  if (TREE_CODE (t) == STATEMENT_LIST)
+    {
+      for (tree stmt : tsi_range (t))
+	if (side_effects_without_reflection_p (stmt))
+	  return true;
+      return false;
+    }
+  if (TREE_CODE (t) == BIND_EXPR
+      && BIND_EXPR_REFLECT_BLOCK (t)
+      && !BIND_EXPR_VARS (t)
+      && !BIND_EXPR_BLOCK (t))
+    return side_effects_without_reflection_p (BIND_EXPR_BODY (t));
+  if (TREE_CODE (t) == DECL_EXPR
+      && reflection_null_statement_marker_p (DECL_EXPR_DECL (t)))
+    return false;
+  return TREE_SIDE_EFFECTS (t);
+}
+
 /* True if genericize_if_stmt replaces the IF_STMT STMT by the statement its
    condition selects: an `if constexpr' with a constant condition, or a plain
    `if' with a constant condition whose other statement has no side effects.
@@ -204,9 +234,9 @@ constant_if_selects_clause_p (tree stmt)
   if (IF_STMT_CONSTEXPR_P (stmt))
     return TREE_CODE (cond) == INTEGER_CST;
   if (integer_nonzerop (cond))
-    return !ELSE_CLAUSE (stmt) || !TREE_SIDE_EFFECTS (ELSE_CLAUSE (stmt));
+    return !side_effects_without_reflection_p (ELSE_CLAUSE (stmt));
   if (integer_zerop (cond))
-    return !THEN_CLAUSE (stmt) || !TREE_SIDE_EFFECTS (THEN_CLAUSE (stmt));
+    return !side_effects_without_reflection_p (THEN_CLAUSE (stmt));
   return false;
 }
 
@@ -946,13 +976,18 @@ cp_gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
       /* Under -freflection, do_poplevel kept a block that declares nothing
 	 for std::meta::statements_of.  It is just its statements now, as
 	 without -freflection, so that the gimplifier, and so
-	 -Wimplicit-fallthrough, see the same code.  */
+	 -Wimplicit-fallthrough, see the same code.  Gimplify them as a
+	 statement of their own, as a statement list does each of its
+	 statements: carrying on with them here would gimplify a lone
+	 statement, such as a `return', under the location of the BIND_EXPR
+	 rather than its own.  */
       if (BIND_EXPR_REFLECT_BLOCK (*expr_p)
 	  && !BIND_EXPR_VARS (*expr_p)
 	  && !BIND_EXPR_BLOCK (*expr_p))
 	{
-	  *expr_p = BIND_EXPR_BODY (*expr_p);
-	  ret = GS_OK;
+	  gimplify_and_add (BIND_EXPR_BODY (*expr_p), pre_p);
+	  *expr_p = NULL_TREE;
+	  ret = GS_ALL_DONE;
 	}
       else
 	ret = (enum gimplify_status) c_gimplify_expr (expr_p, pre_p, post_p);
@@ -990,10 +1025,12 @@ cp_gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
     case IF_STMT:
       /* Under -freflection, cp_genericize_r kept an `if' with a constant
 	 condition for std::meta::statements_of.  It is just the statement it
-	 selects now, as without -freflection.  */
+	 selects now, as without -freflection.  Gimplify that as a statement
+	 of its own, for the reason given for BIND_EXPR above.  */
       gcc_assert (IF_STMT_REFLECTION_KEPT_P (*expr_p));
-      *expr_p = kept_if_replacement (*expr_p);
-      ret = GS_OK;
+      gimplify_and_add (kept_if_replacement (*expr_p), pre_p);
+      *expr_p = NULL_TREE;
+      ret = GS_ALL_DONE;
       break;
 
     case FOR_STMT:
