@@ -372,10 +372,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     consteval info increment_of(info);
     consteval info loop_body_of(info);
 
-    // A goto statement, and a label as statements_of lists it: `L:` is an
-    // element of its own, followed by the statement it labels. label_of gives
-    // the label a goto jumps to, or the one a label statement defines; two
-    // reflections of the same label compare equal.
+    // A goto statement, and a labeled statement `L: s`, whose statements_of
+    // gives `s` (a null statement for a label at the end of a block); that
+    // of `case v: s` gives `v` and then `s`, and that of `default: s` gives
+    // `s`. label_of gives the label a goto jumps to, or the one a labeled
+    // statement defines; two reflections of the same label compare equal.
     consteval bool is_goto_statement(info);
     consteval bool is_label_statement(info);
     consteval info label_of(info);

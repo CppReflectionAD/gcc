@@ -547,6 +547,7 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       IF_STMT_REFLECTION_KEPT_P (in IF_STMT)
       LOOP_BODY_COMPOUND_P (in FOR_STMT, WHILE_STMT, DO_STMT)
       COND_EXPR_REFLECTION_NO_ELSE_P (in COND_EXPR)
+      SWITCH_STMT_BODY_COMPOUND_P (in SWITCH_STMT)
    5: IDENTIFIER_VIRTUAL_P (in IDENTIFIER_NODE)
       FUNCTION_RVALUE_QUALIFIED (in FUNCTION_TYPE, METHOD_TYPE)
       BIND_EXPR_REFLECT_BODY (in BIND_EXPR)
@@ -6034,6 +6035,9 @@ decl_template_parm_check (const_tree t, const char *f, int l, const char *fn)
    compound statement (brace-enclosed).  */
 #define LOOP_BODY_COMPOUND_P(NODE) \
   TREE_LANG_FLAG_4 (TREE_CHECK3 (NODE, FOR_STMT, WHILE_STMT, DO_STMT))
+/* Likewise for a SWITCH_STMT.  */
+#define SWITCH_STMT_BODY_COMPOUND_P(NODE) \
+  TREE_LANG_FLAG_4 (SWITCH_STMT_CHECK (NODE))
 
 /* Like PACK_EXPANSION_EXTRA_ARGS, for constexpr if.  IF_SCOPE is used while
    building an IF_STMT; IF_STMT_EXTRA_ARGS is used after it is complete.  */

@@ -4110,6 +4110,30 @@ unwrap_for_scope (tree stmt)
     return body;
   return stmt;
 }
+
+/* Whether STMT is a BIND_EXPR that isn't a block of the source.  After a
+   label, the front end gives each variable with a non-trivial destructor a
+   scope of its own, which ends where its block does (see
+   maybe_push_cleanup_level), and cp_finish_decl does the same for a
+   variable length array.  The statements in it are statements of the
+   block.  */
+
+static bool
+transparent_scope_p (tree stmt)
+{
+  return (stmt
+	  && TREE_CODE (stmt) == BIND_EXPR
+	  && (!TREE_TYPE (stmt) || VOID_TYPE_P (TREE_TYPE (stmt)))
+	  && !BIND_EXPR_TRY_BLOCK (stmt)
+	  && !BIND_EXPR_VEC_DTOR (stmt)
+	  && !BIND_EXPR_BODY_BLOCK (stmt)
+	  && !BIND_EXPR_REFLECT_BLOCK (stmt)
+	  && !BIND_EXPR_REFLECT_BODY (stmt)
+	  && !BIND_EXPR_REFLECT_SELECTION_SCOPE (stmt)
+	  && !BIND_EXPR_REFLECT_FOR_SCOPE (stmt)
+	  && unwrap_for_scope (stmt) == stmt);
+}
+
 /* Append STMT, a statement of a block, to ELTS the way statements_of
    reports it.  */
 
@@ -4155,6 +4179,16 @@ append_block_statement (location_t loc, tree stmt,
 	  && eh_cleanup_p (TREE_OPERAND (stmt, 1))))
     {
       tree body = TREE_OPERAND (stmt, 0);
+      if (body && TREE_CODE (body) == STATEMENT_LIST)
+	for (tree s : tsi_range (body))
+	  append_block_statement (loc, s, elts);
+      else
+	append_block_statement (loc, body, elts);
+      return;
+    }
+  if (transparent_scope_p (stmt))
+    {
+      tree body = BIND_EXPR_BODY (stmt);
       if (body && TREE_CODE (body) == STATEMENT_LIST)
 	for (tree s : tsi_range (body))
 	  append_block_statement (loc, s, elts);
@@ -4224,6 +4258,180 @@ strip_debug_begin_stmts (tree t)
   return stmt ? stmt : t;
 }
 
+/* Whether T is a labeled statement: a LABEL_EXPR for `L:', or a
+   CASE_LABEL_EXPR for `case' or `default'.  */
+
+static bool
+labeled_statement_p (tree t)
+{
+  return (t
+	  && (TREE_CODE (t) == LABEL_EXPR
+	      || TREE_CODE (t) == CASE_LABEL_EXPR));
+}
+
+/* The statement each labeled statement labels, by the LABEL_DECL of the
+   label.  In the trees, a label is a statement of its own, followed by
+   that statement.  A reflection of the label can hold a copy of its
+   LABEL_EXPR, as constexpr call caching unshares arguments, but not of the
+   LABEL_DECL.  */
+
+static GTY(()) hash_map<tree, tree> *labeled_statements;
+
+/* The key in labeled_statements of LABEL, a labeled statement.  */
+
+static tree
+labeled_statement_key (tree label)
+{
+  tree decl = (TREE_CODE (label) == LABEL_EXPR
+	       ? LABEL_EXPR_LABEL (label) : CASE_LABEL (label));
+  return decl ? decl : label;
+}
+
+/* Record STMT as the statement LABEL labels, or, if STMT is null, a null
+   statement, for a label at the end of a block.  Keep what is recorded
+   already, so that reflections of the statement compare equal.  */
+
+static void
+record_labeled_statement (tree label, tree stmt)
+{
+  if (!labeled_statements)
+    labeled_statements = hash_map<tree, tree>::create_ggc (16);
+  tree key = labeled_statement_key (label);
+  if (labeled_statements->get (key))
+    return;
+  if (!stmt)
+    stmt = reflection_null_statement_marker (EXPR_LOCATION (label));
+  labeled_statements->put (key, stmt);
+}
+
+/* ELTS from START on are statements in a row, as statements_of reports
+   them.  Make each labeled statement one statement with the one after it,
+   and record that as the statement it labels.  Go from the end, so that in
+   `a: b: s;' the statement `a' labels is `b: s;'.  */
+
+static void
+fold_labeled_statements (vec<constructor_elt, va_gc> *elts, unsigned start)
+{
+  unsigned n = vec_safe_length (elts);
+  if (n <= start)
+    return;
+  auto_vec<bool> labeled;
+  labeled.safe_grow_cleared (n);
+  unsigned next = n;
+  for (unsigned i = n; i-- > start; )
+    {
+      tree t = REFLECT_EXPR_HANDLE ((*elts)[i].value);
+      if (labeled_statement_p (t))
+	{
+	  tree stmt = NULL_TREE;
+	  if (next < n)
+	    {
+	      stmt = REFLECT_EXPR_HANDLE ((*elts)[next].value);
+	      labeled[next] = true;
+	    }
+	  record_labeled_statement (t, stmt);
+	}
+      next = i;
+    }
+  unsigned j = start;
+  for (unsigned i = start; i < n; ++i)
+    if (!labeled[i])
+      (*elts)[j++] = (*elts)[i];
+  elts->truncate (j);
+}
+
+/* Append the statements of LIST, a STATEMENT_LIST or a single statement,
+   to ELTS the way statements_of reports the statements of a block.  */
+
+static void
+append_block_statements (location_t loc, tree list,
+			 vec<constructor_elt, va_gc> **elts)
+{
+  unsigned start = vec_safe_length (*elts);
+  if (list && TREE_CODE (list) == STATEMENT_LIST)
+    for (tree stmt : tsi_range (list))
+      append_block_statement (loc, stmt, elts);
+  else if (list)
+    append_block_statement (loc, list, elts);
+  fold_labeled_statements (*elts, start);
+}
+
+/* The statement that LABEL, a labeled statement, labels.  */
+
+static tree
+labeled_statement_of (tree label)
+{
+  tree key = labeled_statement_key (label);
+  if (labeled_statements)
+    if (tree *stmt = labeled_statements->get (key))
+      return *stmt;
+  /* Each way to reflect a labeled statement records the statement it
+     labels, apart from reflecting one in a body that another translation
+     unit reflected.  */
+  record_labeled_statement (label, NULL_TREE);
+  return *labeled_statements->get (key);
+}
+
+/* T is a statement that is a part of another, such as the then statement
+   of an if, and not a block.  If it is a labeled statement, then it is a
+   STATEMENT_LIST of the label and the statement it labels; return the
+   label.  Otherwise return T.  */
+
+static tree
+labeled_clause (location_t loc, tree t)
+{
+  if (!t
+      || TREE_CODE (t) != STATEMENT_LIST
+      || STATEMENT_LIST_REFLECT_BLOCK (t))
+    return t;
+  bool labeled = false;
+  for (tree s : tsi_range (t))
+    if (TREE_CODE (s) != DEBUG_BEGIN_STMT && TREE_CODE (s) != PREDICT_EXPR)
+      {
+	labeled = labeled_statement_p (s);
+	break;
+      }
+  if (!labeled)
+    return t;
+  vec<constructor_elt, va_gc> *elts = nullptr;
+  append_block_statements (loc, t, &elts);
+  if (vec_safe_length (elts) != 1)
+    return t;
+  return REFLECT_EXPR_HANDLE ((*elts)[0].value);
+}
+
+/* A reflection of T, a part of another statement that isn't a block, such
+   as the then statement of an if.  */
+
+static tree
+clause_part (location_t loc, tree t)
+{
+  return get_reflection_raw (loc, labeled_clause (loc, t), REFLECT_UNDEF);
+}
+
+static tree get_compound_statement_reflection_for (location_t, tree, tree);
+
+/* A reflection of BODY, the body of STMT, a loop or a `switch': a block if
+   COMPOUND, even with a single statement in it, whatever the debug flags,
+   otherwise the statement, a labeled one if it is one.  */
+
+static tree
+body_part (location_t loc, tree stmt, tree body, bool compound)
+{
+  if (!compound)
+    return clause_part (loc, body);
+  tree block = strip_debug_begin_stmts (body);
+  return get_compound_statement_reflection_for (loc, stmt, block);
+}
+
+/* A reflection of BODY, the body of loop STMT.  */
+
+static tree
+loop_body_part (location_t loc, tree stmt, tree body)
+{
+  return body_part (loc, stmt, body, LOOP_BODY_COMPOUND_P (stmt));
+}
+
 /* Process std::meta::statements_of.
    Returns: A vector of reflections of top-level statements in the block.
    Throws: meta::exception if the argument does not represent a block or statement.  */
@@ -4275,13 +4483,30 @@ eval_statements_of (location_t loc, const constexpr_ctx *ctx, tree r,
 	  r = BIND_EXPR_BODY (r);
 	  outer = false;
 	}
-      if (r && TREE_CODE (r) == STATEMENT_LIST)
+      append_block_statements (loc, r, &elts);
+      return get_vector_of_info_elts (elts);
+    }
+
+  /* A labeled statement is the label and the statement it labels; a case
+     label is the value it matches, or the values of a GNU case range, too.
+     A null statement for a label at the end of a block.  */
+  if (labeled_statement_p (r))
+    {
+      if (TREE_CODE (r) == CASE_LABEL_EXPR)
 	{
-	  for (tree stmt : tsi_range (r))
-	    append_block_statement (loc, stmt, &elts);
+	  if (CASE_LOW (r))
+	    CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+				    get_reflection_raw (loc, CASE_LOW (r),
+							REFLECT_UNDEF));
+	  if (CASE_HIGH (r))
+	    CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+				    get_reflection_raw (loc, CASE_HIGH (r),
+							REFLECT_UNDEF));
 	}
-      else if (r)
-	append_block_statement (loc, r, &elts);
+      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+			      get_reflection_raw (loc,
+						  labeled_statement_of (r),
+						  REFLECT_UNDEF));
       return get_vector_of_info_elts (elts);
     }
 
@@ -4307,10 +4532,10 @@ eval_statements_of (location_t loc, const constexpr_ctx *ctx, tree r,
 				    get_reflection_raw (loc, IF_COND (r), REFLECT_UNDEF));
 	  if (THEN_CLAUSE (r))
 	    CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-				    get_reflection_raw (loc, THEN_CLAUSE (r), REFLECT_UNDEF));
+				    clause_part (loc, THEN_CLAUSE (r)));
 	  if (ELSE_CLAUSE (r))
 	    CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-				    get_reflection_raw (loc, ELSE_CLAUSE (r), REFLECT_UNDEF));
+				    clause_part (loc, ELSE_CLAUSE (r)));
 	}
       else if (TREE_CODE (r) == FOR_STMT)
 	{
@@ -4325,7 +4550,7 @@ eval_statements_of (location_t loc, const constexpr_ctx *ctx, tree r,
 				    get_reflection_raw (loc, FOR_EXPR (r), REFLECT_UNDEF));
 	  if (FOR_BODY (r))
 	    CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-				    get_reflection_raw (loc, FOR_BODY (r), REFLECT_UNDEF));
+				    loop_body_part (loc, r, FOR_BODY (r)));
 	}
       else if (TREE_CODE (r) == RANGE_FOR_STMT)
 	{
@@ -4349,13 +4574,13 @@ eval_statements_of (location_t loc, const constexpr_ctx *ctx, tree r,
 				    get_reflection_raw (loc, WHILE_COND (r), REFLECT_UNDEF));
 	  if (WHILE_BODY (r))
 	    CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-				    get_reflection_raw (loc, WHILE_BODY (r), REFLECT_UNDEF));
+				    loop_body_part (loc, r, WHILE_BODY (r)));
 	}
       else if (TREE_CODE (r) == DO_STMT)
 	{
 	  if (DO_BODY (r))
 	    CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-				    get_reflection_raw (loc, DO_BODY (r), REFLECT_UNDEF));
+				    loop_body_part (loc, r, DO_BODY (r)));
 	  if (DO_COND (r))
 	    CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
 				    get_reflection_raw (loc, DO_COND (r), REFLECT_UNDEF));
@@ -4367,12 +4592,12 @@ eval_statements_of (location_t loc, const constexpr_ctx *ctx, tree r,
 				    get_reflection_raw (loc, TREE_OPERAND (r, 0), REFLECT_UNDEF));
 	  if (TREE_OPERAND (r, 1))
 	    CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-				    get_reflection_raw (loc, TREE_OPERAND (r, 1), REFLECT_UNDEF));
+				    clause_part (loc, TREE_OPERAND (r, 1)));
 	  /* An if with no else has no else part, only the empty statement
 	     genericize_if_stmt adds for the gimplifier.  */
 	  if (TREE_OPERAND (r, 2) && !COND_EXPR_REFLECTION_NO_ELSE_P (r))
 	    CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-				    get_reflection_raw (loc, TREE_OPERAND (r, 2), REFLECT_UNDEF));
+				    clause_part (loc, TREE_OPERAND (r, 2)));
 	}
       else if (TREE_CODE (r) == LOOP_EXPR)
 	{
@@ -4385,9 +4610,12 @@ eval_statements_of (location_t loc, const constexpr_ctx *ctx, tree r,
 	  if (SWITCH_STMT_COND (r))
 	    CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
 				    get_reflection_raw (loc, SWITCH_STMT_COND (r), REFLECT_UNDEF));
-	  if (SWITCH_STMT_BODY (r))
-	    CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
-				    get_reflection_raw (loc, SWITCH_STMT_BODY (r), REFLECT_UNDEF));
+	  if (tree body = SWITCH_STMT_BODY (r))
+	    {
+	      bool braced = SWITCH_STMT_BODY_COMPOUND_P (r);
+	      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE,
+				      body_part (loc, r, body, braced));
+	    }
 	}
       else if (TREE_CODE (r) == TRY_BLOCK)
 	{
@@ -5664,7 +5892,7 @@ eval_loop_body_of (location_t loc, const constexpr_ctx *ctx, tree r,
 			    fun, non_constant_p, jump_target);
 
   if (LOOP_BODY_COMPOUND_P (stmt))
-    return get_compound_statement_reflection_for (loc, stmt, body);
+    return loop_body_part (loc, stmt, body);
   while (body && ((TREE_CODE (body) == BIND_EXPR && !BIND_EXPR_VARS (body))
 		  || (TREE_CODE (body) == STATEMENT_LIST
 		      && STATEMENT_LIST_TAIL (body))))
@@ -5681,7 +5909,7 @@ eval_loop_body_of (location_t loc, const constexpr_ctx *ctx, tree r,
 	  body = first;
 	}
     }
-  body = unwrap_for_scope (body);
+  body = unwrap_for_scope (labeled_clause (loc, body));
   if (!body || (TREE_CODE (body) == STATEMENT_LIST
 		&& !STATEMENT_LIST_TAIL (body)))
     {
@@ -5708,7 +5936,8 @@ eval_then_statement_of (location_t loc, const constexpr_ctx *ctx, tree r,
   tree op = (TREE_CODE (if_stmt) == IF_STMT
 	     ? THEN_CLAUSE (if_stmt)
 	     : TREE_OPERAND (if_stmt, 1));
-  op = unwrap_for_scope (strip_debug_begin_stmts (strip_goto_prediction (op)));
+  op = strip_debug_begin_stmts (strip_goto_prediction (op));
+  op = unwrap_for_scope (labeled_clause (loc, op));
   if (!op || IS_EMPTY_STMT (op) || op == void_node)
     return get_compound_statement_reflection_for (loc, if_stmt, NULL_TREE);
   return get_reflection_raw (loc, op, REFLECT_UNDEF);
@@ -5726,7 +5955,8 @@ eval_else_statement_of (location_t loc, const constexpr_ctx *ctx, tree r,
   tree op = (TREE_CODE (if_stmt) == IF_STMT
 	     ? ELSE_CLAUSE (if_stmt)
 	     : TREE_OPERAND (if_stmt, 2));
-  op = unwrap_for_scope (strip_debug_begin_stmts (strip_goto_prediction (op)));
+  op = strip_debug_begin_stmts (strip_goto_prediction (op));
+  op = unwrap_for_scope (labeled_clause (loc, op));
   if (!op || IS_EMPTY_STMT (op) || op == void_node)
     return get_null_reflection ();
   return get_reflection_raw (loc, op, REFLECT_UNDEF);

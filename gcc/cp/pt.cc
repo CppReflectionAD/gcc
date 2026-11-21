@@ -20375,6 +20375,7 @@ tsubst_stmt (tree t, tree args, tsubst_flags_t complain, tree in_decl)
 
     case SWITCH_STMT:
       stmt = begin_switch_stmt ();
+      SWITCH_STMT_BODY_COMPOUND_P (stmt) = SWITCH_STMT_BODY_COMPOUND_P (t);
       tmp = RECUR (SWITCH_STMT_COND (t));
       finish_switch_cond (tmp, stmt);
       RECUR (SWITCH_STMT_BODY (t));
