@@ -1421,7 +1421,7 @@ finish_if_stmt (tree if_stmt)
     }
   scope = do_poplevel (scope);
   if (flag_reflection && TREE_CODE (scope) == BIND_EXPR)
-    BIND_EXPR_REFLECT_IF_SCOPE (scope) = 1;
+    BIND_EXPR_REFLECT_SELECTION_SCOPE (scope) = 1;
   add_stmt (scope);
 }
 
@@ -2065,7 +2065,10 @@ finish_switch_stmt (tree switch_stmt)
 
   scope = SWITCH_STMT_SCOPE (switch_stmt);
   SWITCH_STMT_SCOPE (switch_stmt) = NULL;
-  add_stmt (do_poplevel (scope));
+  scope = do_poplevel (scope);
+  if (flag_reflection && TREE_CODE (scope) == BIND_EXPR)
+    BIND_EXPR_REFLECT_SELECTION_SCOPE (scope) = 1;
+  add_stmt (scope);
 }
 
 /* Begin a try-block.  Returns a newly-created TRY_BLOCK if
