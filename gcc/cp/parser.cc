@@ -15632,6 +15632,9 @@ cp_parser_selection_statement (cp_parser* parser, bool *if_p,
 	    in_statement = parser->in_statement;
 	    parser->in_switch_statement_p = true;
 	    parser->in_statement |= IN_SWITCH_STMT;
+	    if (TREE_CODE (statement) == SWITCH_STMT
+		&& cp_lexer_next_token_is (parser->lexer, CPP_OPEN_BRACE))
+	      SWITCH_STMT_BODY_COMPOUND_P (statement) = 1;
 	    cp_parser_implicitly_scoped_statement (parser, if_p,
 						   guard_tinfo);
 	    parser->in_switch_statement_p = in_switch_statement_p;

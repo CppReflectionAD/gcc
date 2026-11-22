@@ -45,28 +45,32 @@ consteval info nested(info fn, int k, int j) {
 }
 
 // The written gotos and labels, and nothing the front end adds for them.
-static_assert(statements_of(body_of(^^jumps)).size() == 8);
+// A labeled statement is one statement, of the statement it labels.
+static_assert(statements_of(body_of(^^jumps)).size() == 6);
 static_assert(is_label_statement(stmt(^^jumps, 1)));
 static_assert(is_statement(stmt(^^jumps, 1)));
 static_assert(!is_goto_statement(stmt(^^jumps, 1)));
 static_assert(identifier_of(label_of(stmt(^^jumps, 1))) == "again");
+static_assert(statements_of(stmt(^^jumps, 1)).size() == 1);
+static_assert(is_expression_statement(nested(^^jumps, 1, 0)));
 
 // `if (y < 10) goto again;`: the then-branch is the goto itself.
-static_assert(is_if_statement(stmt(^^jumps, 3)));
-static_assert(is_goto_statement(true_expression_of(stmt(^^jumps, 3))));
-static_assert(label_of(true_expression_of(stmt(^^jumps, 3)))
+static_assert(is_if_statement(stmt(^^jumps, 2)));
+static_assert(is_goto_statement(true_expression_of(stmt(^^jumps, 2))));
+static_assert(label_of(true_expression_of(stmt(^^jumps, 2)))
 	      == label_of(stmt(^^jumps, 1)));
 
 // `goto done;` then `done:`.
-static_assert(is_goto_statement(stmt(^^jumps, 5)));
-static_assert(is_statement(stmt(^^jumps, 5)));
-static_assert(!is_expression(stmt(^^jumps, 5)));
-static_assert(is_label_statement(stmt(^^jumps, 6)));
-static_assert(label_of(stmt(^^jumps, 5)) == label_of(stmt(^^jumps, 6)));
-static_assert(identifier_of(label_of(stmt(^^jumps, 6))) == "done");
+static_assert(is_goto_statement(stmt(^^jumps, 4)));
+static_assert(is_statement(stmt(^^jumps, 4)));
+static_assert(!is_expression(stmt(^^jumps, 4)));
+static_assert(is_label_statement(stmt(^^jumps, 5)));
+static_assert(label_of(stmt(^^jumps, 4)) == label_of(stmt(^^jumps, 5)));
+static_assert(identifier_of(label_of(stmt(^^jumps, 5))) == "done");
+static_assert(is_return_statement(nested(^^jumps, 5, 0)));
 
 // Different labels compare unequal.
-static_assert(label_of(stmt(^^jumps, 5)) != label_of(stmt(^^jumps, 1)));
+static_assert(label_of(stmt(^^jumps, 4)) != label_of(stmt(^^jumps, 1)));
 
 // Under Option 2, loops and break remain first-class statements rather than
 // lowered gotos and labels.
@@ -79,7 +83,7 @@ static_assert(is_break_statement(true_expression_of(statements_of(loop_body_of(s
 static_assert(!is_goto_statement(^^int));
 static_assert(!is_label_statement(^^jumps));
 static_assert(!is_goto_statement(stmt(^^jumps, 0)));
-static_assert(!is_label_statement(stmt(^^jumps, 7)));
+static_assert(!is_label_statement(nested(^^jumps, 5, 0)));
 
 consteval bool label_of_rejects() {
   try {
