@@ -5615,12 +5615,26 @@ eval_loop_body_of (location_t loc, const constexpr_ctx *ctx, tree r,
 	body = BIND_EXPR_BODY (body);
       else
 	{
-	  tree_stmt_iterator it = tsi_start (body);
-	  tree first = tsi_stmt (it);
-	  tsi_next (&it);
-	  if (!tsi_end_p (it))
+	  /* With -gstatement-frontiers, a body that isn't a block is a
+	     STATEMENT_LIST of a DEBUG_BEGIN_STMT and the statement, so look
+	     for the one statement that isn't a marker.  A null statement is
+	     the marker alone, which is the empty list without the markers.  */
+	  tree only = NULL_TREE;
+	  bool more = false;
+	  for (tree s : tsi_range (body))
+	    {
+	      if (TREE_CODE (s) == DEBUG_BEGIN_STMT)
+		continue;
+	      if (only)
+		{
+		  more = true;
+		  break;
+		}
+	      only = s;
+	    }
+	  if (more)
 	    break;
-	  body = first;
+	  body = only;
 	}
     }
   body = unwrap_for_scope (body);
