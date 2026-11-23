@@ -650,8 +650,8 @@ at_try_scope ()
 }
 
 /* Finish a scope.  If REFLECT_BLOCK, the scope is a block that is a
-   statement of a block, which gets a BIND_EXPR even if it declares nothing
-   (see BIND_EXPR_REFLECT_BLOCK).  */
+   statement of a block or of an if, which gets a BIND_EXPR even if it
+   declares nothing (see BIND_EXPR_REFLECT_BLOCK).  */
 
 tree
 do_poplevel (tree stmt_list, bool reflect_block)
@@ -2324,6 +2324,17 @@ finish_compound_stmt (tree stmt)
 
   /* ??? See c_end_compound_stmt wrt statement expressions.  */
   add_stmt (stmt);
+
+  /* A BIND_EXPR that do_poplevel made only for std::meta::statements_of has
+     the location of the `}'.  Take it away, so that gimplifying the block
+     doesn't give that location to what it builds without one, such as the
+     predictor of a `continue', which isn't so without -freflection.  */
+  if (!processing_template_decl
+      && TREE_CODE (stmt) == BIND_EXPR
+      && BIND_EXPR_REFLECT_BLOCK (stmt)
+      && !BIND_EXPR_VARS (stmt)
+      && !BIND_EXPR_BLOCK (stmt))
+    SET_EXPR_LOCATION (stmt, UNKNOWN_LOCATION);
 }
 
 /* Finish an asm string literal, which can be a string literal

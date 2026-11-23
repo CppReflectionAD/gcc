@@ -12412,10 +12412,16 @@ compare_reflections (tree lhs, tree rhs)
 	return BIND_EXPR_BODY (lhs) == BIND_EXPR_BODY (rhs);
       return lhs == rhs;
     }
-  else if (TREE_CODE (lhs) == IF_STMT || TREE_CODE (rhs) == IF_STMT)
-    /* Likewise for an `if' with a constant condition that cp_genericize_r
-       keeps under -freflection: cp_tree_equal can't compare statements
-       either.  */
+  else if (TREE_CODE (lhs) == IF_STMT || TREE_CODE (rhs) == IF_STMT
+	   || (TREE_CODE (lhs) == COND_EXPR
+	       && eval_is_statement (lhs) == boolean_true_node)
+	   || (TREE_CODE (rhs) == COND_EXPR
+	       && eval_is_statement (rhs) == boolean_true_node))
+    /* Likewise for an `if', whether it's the IF_STMT of one with a constant
+       condition that cp_genericize_r keeps under -freflection or the
+       COND_EXPR genericize_if_stmt makes of the others: cp_tree_equal can't
+       compare the blocks in it, and two `if's that are alike are still two
+       statements.  */
     return lhs == rhs;
   else if (TYPE_P (lhs) && TYPE_P (rhs))
     {
