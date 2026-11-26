@@ -3549,11 +3549,38 @@ eh_cleanup_p (tree handler)
 		       || TREE_CODE (handler) == EH_FILTER_EXPR));
 }
 
+/* Whether T runs a cleanup, such as the destructor of a local variable,
+   after the rest of its block, which it holds; if so, set *BODY to that
+   rest.  cp_genericize lowers the CLEANUP_STMT of such a variable to a
+   TRY_FINALLY_EXPR, or for a named return value, which is destroyed only
+   if an exception is thrown, to a TRY_CATCH_EXPR.  An immediate function
+   is never genericized, so its body keeps the CLEANUP_STMT.  */
+
+static bool
+cleanup_statement_p (tree t, tree *body)
+{
+  if (!t)
+    return false;
+  if (TREE_CODE (t) == TRY_FINALLY_EXPR
+      || (TREE_CODE (t) == TRY_CATCH_EXPR
+	  && eh_cleanup_p (TREE_OPERAND (t, 1))))
+    {
+      *body = TREE_OPERAND (t, 0);
+      return true;
+    }
+  if (TREE_CODE (t) == CLEANUP_STMT)
+    {
+      *body = CLEANUP_BODY (t);
+      return true;
+    }
+  return false;
+}
+
 /* The `if' or `switch' of SCOPE, if SCOPE is a
    BIND_EXPR_REFLECT_SELECTION_SCOPE that still holds one, else SCOPE.  The
    statement is the last one of the scope, after the declarations of its
-   init-statement and condition, or of the body of the TRY_FINALLY_EXPR that
-   destroys a variable they declare.  */
+   init-statement and condition, or of the body of the TRY_FINALLY_EXPR or
+   CLEANUP_STMT that destroys a variable they declare.  */
 
 static tree
 selection_of_scope (tree scope)
@@ -3572,10 +3599,8 @@ selection_of_scope (tree scope)
 	    last = s;
 	t = last;
       }
-    else if (TREE_CODE (t) == TRY_FINALLY_EXPR
-	     || (TREE_CODE (t) == TRY_CATCH_EXPR
-		 && eh_cleanup_p (TREE_OPERAND (t, 1))))
-      t = TREE_OPERAND (t, 0);
+    else if (tree body; cleanup_statement_p (t, &body))
+      t = body;
     else
       break;
   /* An `if consteval' is folded to the clause that is run.  */
@@ -4216,12 +4241,10 @@ append_block_statement (location_t loc, tree stmt,
      CLEANUP_STMT.  C++ has no try-finally statement, so report the
      statements of the body in place, and leave out the destructor call,
      which isn't in the source.  A named return value is destroyed only if
-     an exception is thrown, so its cleanup is a TRY_CATCH_EXPR instead.  */
-  if (TREE_CODE (stmt) == TRY_FINALLY_EXPR
-      || (TREE_CODE (stmt) == TRY_CATCH_EXPR
-	  && eh_cleanup_p (TREE_OPERAND (stmt, 1))))
+     an exception is thrown, so its cleanup is a TRY_CATCH_EXPR instead, and
+     an immediate function keeps the CLEANUP_STMT (cleanup_statement_p).  */
+  if (tree body; cleanup_statement_p (stmt, &body))
     {
-      tree body = TREE_OPERAND (stmt, 0);
       if (body && TREE_CODE (body) == STATEMENT_LIST)
 	for (tree s : tsi_range (body))
 	  append_block_statement (loc, s, elts);
@@ -5073,12 +5096,15 @@ find_var_initializer_in_scope (tree var)
 		}
 	      /* The rest of the block after a local with a non-trivial destructor
 		 is the body of a TRY_FINALLY_EXPR (or, for a named return value, a
-		 TRY_CATCH_EXPR), as in append_block_statement.  */
+		 TRY_CATCH_EXPR), as in append_block_statement, or of a
+		 CLEANUP_STMT in an immediate function.  */
 	      else if (TREE_CODE (stmt) == TRY_FINALLY_EXPR
 		       || TREE_CODE (stmt) == TRY_CATCH_EXPR)
 		{
 		  return walk (TREE_OPERAND (stmt, 0));
 		}
+	      else if (TREE_CODE (stmt) == CLEANUP_STMT)
+		return walk (CLEANUP_BODY (stmt));
 	      else if (TREE_CODE (stmt) == IF_STMT)
 		{
 		  return (walk (IF_COND (stmt))
