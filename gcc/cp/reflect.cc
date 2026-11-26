@@ -3753,8 +3753,9 @@ reflection_record_constructor_init (tree var, tree call)
 
 /* A static local with a dynamic initializer is split too: expand_static_init
    declares it without an initializer and initializes it in an `if' on its
-   guard variable, after the declaration.  Map each guard variable to its
-   static local.  */
+   guard variable, after the declaration.  A constant-initialized static
+   local with a non-trivial destructor gets such an `if' too, which only
+   registers the destructor.  Map each guard variable to its static local.  */
 
 static GTY(()) decl_tree_map *static_init_guards;
 
@@ -3763,14 +3764,22 @@ static tree constructed_object (tree);
 /* expand_static_init (VAR, INIT) under -freflection, where GUARD is VAR's
    guard variable.  Keep the initializer as written, as for a local that
    isn't static, and remember GUARD, so that statements_of can leave out the
-   `if' as part of the declaration.  */
+   `if' as part of the declaration.  INIT is null if VAR is constant-
+   initialized, and the `if' only registers its destructor.  */
 
 void
 reflection_record_static_init (tree var, tree guard, tree init)
 {
   if (processing_template_decl
-      || !VAR_P (var) || DECL_ARTIFICIAL (var) || !init)
+      || !VAR_P (var) || DECL_ARTIFICIAL (var))
     return;
+  if (!init)
+    {
+      if (!static_init_guards)
+	static_init_guards = decl_tree_map::create_ggc (16);
+      static_init_guards->put (guard, var);
+      return;
+    }
   if (!split_initializers)
     split_initializers = decl_tree_map::create_ggc (16);
   /* reflection_split_nonconstant_init has kept an aggregate's initializer,
@@ -3999,7 +4008,7 @@ find_static_init_guard (tree *tp, int *walk_subtrees, void *)
 static bool
 split_initialization_p (tree stmt)
 {
-  if (!split_initializers)
+  if (!split_initializers && !static_init_guards)
     return false;
   while (stmt && (TREE_CODE (stmt) == CLEANUP_POINT_EXPR
 		  || TREE_CODE (stmt) == EXPR_STMT
@@ -4015,18 +4024,16 @@ split_initialization_p (tree stmt)
 	stmt = tsi_stmt (tsi_start (stmt));
     }
   if (tree obj = constructed_object (stmt))
-    return VAR_P (obj) && split_initializers->get (obj);
+    return VAR_P (obj) && split_initializers && split_initializers->get (obj);
   if (static_init_guards && stmt
       && (TREE_CODE (stmt) == IF_STMT || TREE_CODE (stmt) == COND_EXPR))
     {
       tree cond = (TREE_CODE (stmt) == IF_STMT
 		   ? IF_COND (stmt) : COND_EXPR_COND (stmt));
-      tree var = cp_walk_tree_without_duplicates (&cond,
-						  find_static_init_guard,
-						  NULL);
-      return var && split_initializers->get (var);
+      return cp_walk_tree_without_duplicates (&cond, find_static_init_guard,
+					      NULL) != NULL_TREE;
     }
-  if (!stmt || TREE_CODE (stmt) != INIT_EXPR)
+  if (!split_initializers || !stmt || TREE_CODE (stmt) != INIT_EXPR)
     return false;
   tree sub = TREE_OPERAND (stmt, 0);
   if (!handled_component_p (sub))
@@ -4079,14 +4086,14 @@ find_body_table_entries (tree *tp, int *walk_subtrees, void *data)
 /* Append to GROUPS the variables of each declaration in BODY with more than
    one declarator, as a TREE_VEC, to INITS each variable of BODY with a split
    initialization followed by its initializer as written, and to GUARDS the
-   guard variable of each static local of BODY with a dynamic initializer
-   followed by the static local, in the order a walk of BODY finds them.  */
+   guard variable of each static local of BODY with a dynamic initializer or
+   destructor followed by the static local, in the order a walk of BODY finds them.  */
 
 void
 reflection_body_tables (tree body, vec<tree> &groups, vec<tree> &inits,
 			vec<tree> &guards)
 {
-  if (!declaration_declarators && !split_initializers)
+  if (!declaration_declarators && !split_initializers && !static_init_guards)
     return;
   body_tables t;
   t.groups = &groups;
