@@ -167,9 +167,12 @@ extern const char *lhd_get_sarif_source_language (const char *);
 /* Tree inlining hooks.  */
 #define LANG_HOOKS_TREE_INLINING_VAR_MOD_TYPE_P \
   hook_bool_tree_tree_false
+#define LANG_HOOKS_TREE_INLINING_SHARED_OPERANDS_P \
+  hook_bool_const_tree_false
 
 #define LANG_HOOKS_TREE_INLINING_INITIALIZER { \
   LANG_HOOKS_TREE_INLINING_VAR_MOD_TYPE_P, \
+  LANG_HOOKS_TREE_INLINING_SHARED_OPERANDS_P, \
 }
 
 /* Hooks for tree gimplification.  */
