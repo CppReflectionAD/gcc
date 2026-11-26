@@ -3610,8 +3610,35 @@ if_of_if_scope (tree scope)
      add_decl_expr wraps it in a CLEANUP_POINT_EXPR, because a USING_DECL
      keeps its USING_DECL_DECLS in DECL_INITIAL, and cp_genericize_r leaves
      an empty statement in that in place of the DECL_EXPR.
+   - the DECL_EXPR that set_up_extended_ref_temp adds for the variable
+     that holds a temporary whose lifetime a declaration extends, such as
+     the T in `const T& r = T{};' or the array of a std::initializer_list.
+     It comes before the declaration, but it is part of that declaration's
+     initializer, as on clang.  add_decl_expr wraps it in a
+     CLEANUP_POINT_EXPR if the variable has a DECL_INITIAL, and otherwise
+     the declaration's split initializer initializes it.
    A statement in the source is wrapped in an EXPR_STMT or a
    CLEANUP_POINT_EXPR, so none of the other bare trees can be one.  */
+
+/* Whether DECL is a variable that make_temporary_var_for_ref_to_temp
+   created to extend the lifetime of a temporary: one with automatic
+   storage has no name, and a static one has the mangled name of a
+   reference temporary.  The variable of a structured binding can have no
+   name either.  */
+
+static bool
+extended_temporary_p (tree decl)
+{
+  if (!VAR_P (decl)
+      || !DECL_ARTIFICIAL (decl)
+      || !DECL_IGNORED_P (decl)
+      || DECL_DECOMPOSITION_P (decl))
+    return false;
+  if (!DECL_NAME (decl))
+    return !TREE_STATIC (decl);
+  return (TREE_STATIC (decl)
+	  && startswith (IDENTIFIER_POINTER (DECL_NAME (decl)), "_ZGR"));
+}
 
 static bool
 added_statement_p (tree stmt)
@@ -3621,13 +3648,15 @@ added_statement_p (tree stmt)
       tree e = TREE_OPERAND (stmt, 0);
       return (IS_EMPTY_STMT (e)
 	      || (TREE_CODE (e) == DECL_EXPR
-		  && TREE_CODE (DECL_EXPR_DECL (e)) == USING_DECL));
+		  && (TREE_CODE (DECL_EXPR_DECL (e)) == USING_DECL
+		      || extended_temporary_p (DECL_EXPR_DECL (e)))));
     }
   if (TREE_CODE (stmt) == DECL_EXPR)
     {
       tree d = DECL_EXPR_DECL (stmt);
-      return (VAR_P (d) && DECL_ARTIFICIAL (d) && !DECL_NAME (d)
-	      && TREE_CODE (TREE_TYPE (d)) == BOOLEAN_TYPE);
+      return ((VAR_P (d) && DECL_ARTIFICIAL (d) && !DECL_NAME (d)
+	       && TREE_CODE (TREE_TYPE (d)) == BOOLEAN_TYPE)
+	      || extended_temporary_p (d));
     }
   if (IS_EMPTY_STMT (stmt))
     return true;
@@ -5823,7 +5852,7 @@ eval_init_statement_of (location_t loc, const constexpr_ctx *ctx, tree r,
 	       it.ptr != last.ptr; tsi_next (&it))
 	    {
 	      tree s = tsi_stmt (it);
-	      if (TREE_CODE (s) == DEBUG_BEGIN_STMT)
+	      if (TREE_CODE (s) == DEBUG_BEGIN_STMT || added_statement_p (s))
 		continue;
 	      init = s;
 	      break;
@@ -5851,7 +5880,11 @@ eval_init_statement_of (location_t loc, const constexpr_ctx *ctx, tree r,
     return get_null_reflection ();
   if (TREE_CODE (init) == STATEMENT_LIST)
     {
+      /* Not the variable of a temporary that the init-statement extends,
+	 which is part of its initializer.  */
       tree_stmt_iterator it = tsi_start (init);
+      while (!tsi_end_p (it) && added_statement_p (tsi_stmt (it)))
+	tsi_next (&it);
       if (tsi_end_p (it))
 	return get_null_reflection ();
       tree first = tsi_stmt (it);
