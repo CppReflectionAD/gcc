@@ -5852,7 +5852,7 @@ eval_init_statement_of (location_t loc, const constexpr_ctx *ctx, tree r,
 	       it.ptr != last.ptr; tsi_next (&it))
 	    {
 	      tree s = tsi_stmt (it);
-	      if (TREE_CODE (s) == DEBUG_BEGIN_STMT)
+	      if (TREE_CODE (s) == DEBUG_BEGIN_STMT || added_statement_p (s))
 		continue;
 	      init = s;
 	      break;
@@ -5880,7 +5880,11 @@ eval_init_statement_of (location_t loc, const constexpr_ctx *ctx, tree r,
     return get_null_reflection ();
   if (TREE_CODE (init) == STATEMENT_LIST)
     {
+      /* Not the variable of a temporary that the init-statement extends,
+	 which is part of its initializer.  */
       tree_stmt_iterator it = tsi_start (init);
+      while (!tsi_end_p (it) && added_statement_p (tsi_stmt (it)))
+	tsi_next (&it);
       if (tsi_end_p (it))
 	return get_null_reflection ();
       tree first = tsi_stmt (it);

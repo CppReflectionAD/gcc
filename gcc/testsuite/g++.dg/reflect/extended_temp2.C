@@ -3,7 +3,8 @@
 // A declaration that extends the lifetime of a temporary is one statement,
 // as on clang: the variable that holds the temporary, which GCC declares
 // ahead of it, is part of its initializer (cpp_reflection_ad#293).  So is
-// the array of a std::initializer_list.
+// the array of a std::initializer_list.  init_statement_of a `for' that
+// declares such a reference gives its declaration.
 
 #include <meta>
 #include <string>
@@ -68,6 +69,8 @@ int two (int) { const T &a = T{}, &b = T{}; return a.v + b.v; }
 int labeled (int) { l: const T &r = T{}; return r.v; }
 int nested (int x) { { const T &r = T{}; sink (r.v); } return x; }
 int if_init (int) { if (const T &r = T{}; r.v) return 1; return 0; }
+int for_init (int x) { for (const T &r = T{}; x; --x) sink (r.v); return 0; }
+int for_init_trivial (int x) { for (const U &r = U{}; x; --x) sink (r.v); return 0; }
 consteval int immediate () { const U &r = U{}; return r.v; }
 template <typename X> X in_template (X x) { const T &r = T{}; return x + r.v; }
 template int in_template (int);
@@ -97,3 +100,9 @@ static_assert (body_shape (^^binding) == "C(D R)");
 static_assert (initializers_of (st (^^with_dtor, 0)).size () == 1);
 static_assert (is_expression (initializers_of (st (^^with_dtor, 0))[0]));
 static_assert (is_expression (initializer_of (st (^^conditional, 0))));
+
+// The init-statement of a `for' is the declaration, with or without a
+// cleanup for the temporary.
+static_assert (is_declaration_statement (init_statement_of (st (^^for_init, 0))));
+static_assert (is_declaration_statement (init_statement_of (st (^^for_init_trivial, 0))));
+static_assert (initializers_of (init_statement_of (st (^^for_init_trivial, 0))).size () == 1);
