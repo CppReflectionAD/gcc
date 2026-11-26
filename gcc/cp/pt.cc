@@ -30402,6 +30402,9 @@ value_dependent_expression_p (tree expression)
 	  tree h = REFLECT_EXPR_HANDLE (expression);
 	  return dependent_type_p (TREE_VEC_ELT (h, 0));
 	}
+      if (statement_reflection_p (expression))
+	/* See instantiation_dependent_r.  */
+	return false;
       return uses_template_parms (REFLECT_EXPR_HANDLE (expression));
 
     default:
@@ -30827,6 +30830,18 @@ instantiation_dependent_r (tree *tp, int *walk_subtrees,
 	return *tp;
       else
 	break;
+
+      /* A reflection of a statement isn't dependent, and the statement
+	 isn't an expression to look into: a block is a BIND_EXPR, which
+	 would look like a statement-expression, and a null statement or an
+	 alias declaration is a DECL_EXPR of a TYPE_DECL.  */
+    case REFLECT_EXPR:
+      if (statement_reflection_p (*tp))
+	{
+	  *walk_subtrees = false;
+	  return NULL_TREE;
+	}
+      break;
 
       /* Treat statement-expressions as dependent.  */
     case BIND_EXPR:

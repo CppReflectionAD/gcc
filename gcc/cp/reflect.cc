@@ -322,6 +322,20 @@ null_reflection_p (const_tree t)
   return integer_zerop (t) && REFLECTION_TYPE_P (TREE_TYPE (t));
 }
 
+static tree eval_is_statement (tree);
+
+/* True iff T is a reflection of a statement.  Such a reflection is never
+   dependent: nothing names a statement, so it can only be a value computed
+   from a reflection of a function, like statements_of (body_of (^^f)).  */
+
+bool
+statement_reflection_p (const_tree t)
+{
+  return (REFLECT_EXPR_P (t)
+	  && (eval_is_statement (REFLECT_EXPR_HANDLE (const_cast<tree> (t)))
+	      == boolean_true_node));
+}
+
 /* If R represents a null reflection, rewrite it with something the ME
    can process; that is, something that doesn't use REFLECT_EXPR.  */
 
@@ -12932,8 +12946,9 @@ reflection_mangle_prefix (tree refl, char prefix[3])
   /* For ^^T::x, we can't say what the reflection is going to be.  Just say
      it's something dependent.  This is at the end rather than the beginning
      because potential_constant_expression_1 doesn't handle codes like
-     TREE_BINFO.  */
-  if (uses_template_parms (h))
+     TREE_BINFO.  A statement is never dependent, and uses_template_parms
+     would look into it as if it were an expression.  */
+  if (!statement_reflection_p (refl) && uses_template_parms (h))
     {
       strcpy (prefix, "de");
       return h;
