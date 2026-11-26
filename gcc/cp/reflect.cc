@@ -2830,18 +2830,18 @@ eval_type_of (location_t loc, const constexpr_ctx *ctx, tree r,
 }
 
 static tree eval_is_statement (tree);
-static tree if_of_if_scope (tree);
+static tree selection_of_scope (tree);
 
 /* The location where the statement S starts, or UNKNOWN_LOCATION.  Look
    through the trees that wrap an expression statement, which may have no
-   location of their own, and through the scope of an `if', which starts
-   where the `if' does.  A block has none: GCC keeps only the location of
-   its closing brace, in its BIND_EXPR.  */
+   location of their own, and through the scope of an `if' or `switch',
+   which starts where the `if' or `switch' does.  A block has none: GCC
+   keeps only the location of its closing brace, in its BIND_EXPR.  */
 
 static location_t
 statement_location (tree s)
 {
-  s = if_of_if_scope (s);
+  s = selection_of_scope (s);
   if (TREE_CODE (s) == STATEMENT_LIST || TREE_CODE (s) == BIND_EXPR)
     return UNKNOWN_LOCATION;
   while (!EXPR_HAS_LOCATION (s)
@@ -3549,17 +3549,18 @@ eh_cleanup_p (tree handler)
 		       || TREE_CODE (handler) == EH_FILTER_EXPR));
 }
 
-/* The `if' of SCOPE, if SCOPE is a BIND_EXPR_REFLECT_IF_SCOPE that still
-   holds one, else SCOPE.  The `if' is the last statement of the scope, after
-   the declarations of its init-statement and condition, or of the body of the
-   TRY_FINALLY_EXPR that destroys a variable they declare.  */
+/* The `if' or `switch' of SCOPE, if SCOPE is a
+   BIND_EXPR_REFLECT_SELECTION_SCOPE that still holds one, else SCOPE.  The
+   statement is the last one of the scope, after the declarations of its
+   init-statement and condition, or of the body of the TRY_FINALLY_EXPR that
+   destroys a variable they declare.  */
 
 static tree
-if_of_if_scope (tree scope)
+selection_of_scope (tree scope)
 {
   if (!scope
       || TREE_CODE (scope) != BIND_EXPR
-      || !BIND_EXPR_REFLECT_IF_SCOPE (scope))
+      || !BIND_EXPR_REFLECT_SELECTION_SCOPE (scope))
     return scope;
   tree t = BIND_EXPR_BODY (scope);
   while (t)
@@ -3578,9 +3579,20 @@ if_of_if_scope (tree scope)
     else
       break;
   /* An `if consteval' is folded to the clause that is run.  */
-  if (t && (TREE_CODE (t) == COND_EXPR || TREE_CODE (t) == IF_STMT))
+  if (t && (TREE_CODE (t) == COND_EXPR
+	    || TREE_CODE (t) == IF_STMT
+	    || TREE_CODE (t) == SWITCH_STMT))
     return t;
   return scope;
+}
+
+/* The `if' of SCOPE, if SCOPE is the scope of one, else SCOPE.  */
+
+static tree
+if_of_if_scope (tree scope)
+{
+  tree stmt = selection_of_scope (scope);
+  return stmt && TREE_CODE (stmt) == SWITCH_STMT ? scope : stmt;
 }
 
 /* True if STMT is a statement that the front end adds to a function body
@@ -4244,10 +4256,10 @@ eval_statements_of (location_t loc, const constexpr_ctx *ctx, tree r,
 
   vec<constructor_elt, va_gc> *elts = nullptr;
 
-  /* The scope of an `if' that declares a variable is the `if'.  Its parts are
-     the declarations of its init-statement and condition, as on clang, and
-     then its own.  */
-  if (tree if_stmt = if_of_if_scope (r); if_stmt != r)
+  /* The scope of an `if' or `switch' that declares a variable is the
+     statement.  Its parts are the declarations of its init-statement and
+     condition, as on clang, and then its own.  */
+  if (tree stmt = selection_of_scope (r); stmt != r)
     {
       tree body = BIND_EXPR_BODY (r);
       if (TREE_CODE (body) == STATEMENT_LIST)
@@ -4255,22 +4267,22 @@ eval_statements_of (location_t loc, const constexpr_ctx *ctx, tree r,
 	  append_block_statement (loc, s, &elts);
       else
 	append_block_statement (loc, body, &elts);
-      /* That gave the `if' last; give its parts instead.  */
+      /* That gave the statement last; give its parts instead.  */
       if (elts && !elts->is_empty ()
-	  && REFLECT_EXPR_HANDLE (elts->last ().value) == if_stmt)
+	  && REFLECT_EXPR_HANDLE (elts->last ().value) == stmt)
 	elts->pop ();
-      r = if_stmt;
+      r = stmt;
     }
 
   if (r && (TREE_CODE (r) == BIND_EXPR || TREE_CODE (r) == STATEMENT_LIST))
     {
       /* A block in this one is one of its statements, and so is the scope
-	 of an `if' and the scope of a `for' that declares a variable.  */
+	 of an `if', a `switch' or a `for' that declares a variable.  */
       bool outer = true;
       while (r && TREE_CODE (r) == BIND_EXPR
 	     && (outer
 		 || (!BIND_EXPR_REFLECT_BLOCK (r)
-		     && !BIND_EXPR_REFLECT_IF_SCOPE (r)
+		     && !BIND_EXPR_REFLECT_SELECTION_SCOPE (r)
 		     && !BIND_EXPR_REFLECT_FOR_SCOPE (r)
 		     && unwrap_for_scope (r) == r)))
 	{
@@ -4492,11 +4504,11 @@ eval_is_compound_statement (tree r)
     return boolean_false_node;
   if (TREE_CODE (r) == STATEMENT_LIST)
     return boolean_true_node;
-  /* The scope of an `if' is the `if', and the scope of a `for' that
-     declares a variable is the `for'.  */
+  /* The scope of an `if', a `switch' or a `for' that declares a variable is
+     the statement.  */
   if (TREE_CODE (r) == BIND_EXPR)
     return ((!TREE_TYPE (r) || VOID_TYPE_P (TREE_TYPE (r)))
-	    && !BIND_EXPR_REFLECT_IF_SCOPE (r)
+	    && !BIND_EXPR_REFLECT_SELECTION_SCOPE (r)
 	    && !BIND_EXPR_REFLECT_FOR_SCOPE (r)
 	    && unwrap_for_scope (r) == r)
 	   ? boolean_true_node : boolean_false_node;
@@ -12463,8 +12475,9 @@ compare_reflections (tree lhs, tree rhs)
 	    && DECL_EXPR_DECL (lhs) == DECL_EXPR_DECL (rhs));
   else if (for_of_for_scope (lhs) != lhs || for_of_for_scope (rhs) != rhs)
     return lhs == rhs;
-  else if (if_of_if_scope (lhs) != lhs || if_of_if_scope (rhs) != rhs)
-    /* The scope of an `if' is a statement, which is equal only to itself.  */
+  else if (selection_of_scope (lhs) != lhs || selection_of_scope (rhs) != rhs)
+    /* The scope of an `if' or `switch' is a statement, which is equal only
+       to itself.  */
     return lhs == rhs;
   else if (eval_is_compound_statement (lhs) == boolean_true_node
 	   && eval_is_compound_statement (rhs) == boolean_true_node)
